@@ -29,6 +29,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <iostream>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -177,6 +178,9 @@ glm::vec4 w;
 glm::vec4 u;                //W  S  D  A
 int camera_movement_keys[] = {0, 0, 0, 0};
 
+// Variável da bola
+glm::vec4 ball_position_c = glm::vec4(0.0f,1.2f,0.6f,1.0f);
+
 // Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
 bool g_UsePerspectiveProjection = true;
 
@@ -196,6 +200,17 @@ GLint bbox_max_uniform;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
+
+float t_prev, t_now;
+
+// Pontos de controle
+glm::vec4 p1 = glm::vec4(0.0f,1.0f,0.0f,1.0f);
+glm::vec4 p2 = glm::vec4(0.0f,2.85f,0.0f,1.0f);
+glm::vec4 p3 = glm::vec4(0.0f,4.0f,0.0f,1.0f);
+glm::vec4 p4 = glm::vec4(0.0f,0.0f,0.0f,1.0f);
+
+// Variável de arremesso
+int arremesso = 0;
 
 int main(int argc, char* argv[])
 {
@@ -269,8 +284,8 @@ int main(int argc, char* argv[])
     LoadShadersFromFiles();
 
     // Carregamos duas imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImage0
-    //LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // TextureImage1
+    LoadTextureImage("../../data/textures/court/warriors_court.png");  // TextureImage0
+    LoadTextureImage("../../data/textures/ball/spalding.png");         // TextureImage1
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/objects/sphere.obj");
@@ -314,6 +329,9 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
+    t_prev = glfwGetTime();
+    float t = 0.0f;
+
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
@@ -348,7 +366,7 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.2f;  // Posição do "near plane"
-        float farplane  = -20.0f; // Posição do "far plane"
+        float farplane  = -30.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -386,13 +404,31 @@ int main(int argc, char* argv[])
         #define BACKBOARD 4
         #define GLASS     5
 
-        /*
         // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f);
+        if (arremesso)
+        {
+            t_now = glfwGetTime();
+            float delta_t = t_now-t_prev;
+
+            // Verifica o c(t) atual
+            glm::vec4 c = powf(1-t,3)*p1 + 3*t*powf(1-t,2)*p2 + 3*t*t*(1-t)*p3 + powf(t,3)*p4;
+            t += 500.0f*delta_t;
+
+            model = Matrix_Translate(c.x,c.y,c.z) * Matrix_Scale(0.2f, 0.2f, 0.2f);
+
+            if (t >= 1.0f)
+            {
+                arremesso = 0;
+                t = 0.0f;
+            }
+
+            t_prev = t_now;
+        }
+        else
+            model = Matrix_Translate(ball_position_c.x,ball_position_c.y,ball_position_c.z) * Matrix_Scale(0.2f, 0.2f, 0.2f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, SPHERE);
         DrawVirtualObject("sphere");
-        */
 
         // Desenhamos o modelo do coelho
         model = Matrix_Translate(10.0f,0.0f,10.0f)
@@ -445,7 +481,6 @@ int main(int argc, char* argv[])
         model = Matrix_Translate(0.8f, 2.9f, -12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
         model = Matrix_Translate(-0.8f, 3.85f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
         model = Matrix_Translate(-0.8f, 2.9f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
-
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -517,31 +552,40 @@ void MoveFreeCamera()
     // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
     camera_view_vector = glm::vec4(x,y,z,0.0f); // Vetor "view", sentido para onde a câmera está virada
 
+    ball_position_c.x = camera_position_c.x+camera_view_vector.x;
+    ball_position_c.y = camera_position_c.y+camera_view_vector.y-0.5f;
+    ball_position_c.z = camera_position_c.z+camera_view_vector.z;
+
     w = -camera_view_vector/norm(camera_view_vector);
     u = crossproduct(camera_up_vector, w)/norm(crossproduct(camera_up_vector, w));
+
+    t_now = glfwGetTime();
+    float delta_t = t_now-t_prev;
 
     // Se a tecla W está sendo pressionada (camera_movement_keys[0] = true), movimentamos a câmera para frente.
     if (camera_movement_keys[0])
     {
-        camera_position_c -= (w * 0.01f);
+        camera_position_c -= (w)*delta_t*4.2f;
     }
     // Se a tecla S está sendo pressionada (camera_movement_keys[1] = true), movimentamos a câmera para trás.
     else if (camera_movement_keys[1])
     {
-        camera_position_c += (w * 0.01f);
+        camera_position_c += (w)*delta_t*4.2f;
     }
     // Se a tecla D está sendo pressionada (camera_movement_keys[2] = true), movimentamos a câmera para a direita.
     if (camera_movement_keys[2])
     {
-        camera_position_c += (u * 0.01f);
+        camera_position_c += (u)*delta_t*4.2f;
     }
     // Se a tecla A está sendo pressionada (camera_movement_keys[3] = true), movimentamos a câmera para a esquerda.
     else if (camera_movement_keys[3])
     {
-        camera_position_c -= (u * 0.01f);
+        camera_position_c -= (u)*delta_t*4.2f;
     }
 
     camera_position_c.y = 1.5f;
+
+    t_prev = t_now;
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
@@ -1303,6 +1347,25 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         //se ele soltou, coloca W como false
         else if (action == GLFW_RELEASE)
             camera_movement_keys[3] = 0;
+    }
+
+    // Se o usuário aperta a tecla Q,
+    if (key == GLFW_KEY_Q and !arremesso)
+    {
+        // Arremesso
+        p1.x=p2.x=p3.x=p4.x=ball_position_c.x;
+
+        p1.y = ball_position_c.y;
+        p2.y = ball_position_c.y+4.0f;
+        p3.y = ball_position_c.y+4.0f;
+        p4.y = 0.0f;
+
+        p1.z = ball_position_c.z;
+        p2.z = ball_position_c.z+2.4f;
+        p3.z = ball_position_c.z+4.8f;
+        p4.z = ball_position_c.z+7.2f;
+
+        arremesso = 1;
     }
 }
 
