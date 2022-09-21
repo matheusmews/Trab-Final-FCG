@@ -19,10 +19,13 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE 0
-#define BUNNY  1
-#define PLANE  2
-#define COURT  3
+#define SPHERE    0
+#define BUNNY     1
+#define PLANE     2
+#define COURT     3
+#define BACKBOARD 4
+#define GLASS     5
+
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -45,7 +48,7 @@ void main()
 {
     // Obtemos a posição da câmera utilizando a inversa da matriz que define o
     // sistema de coordenadas da câmera.
-    vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 origin = vec4(0.0, 0.0, 0.0, 2.0);
     vec4 camera_position = inverse(view) * origin;
 
     // O fragmento atual é coberto por um ponto que percente à superfície de um
@@ -161,7 +164,10 @@ void main()
     //    suas distâncias para a câmera (desenhando primeiro objetos
     //    transparentes que estão mais longe da câmera).
     // Alpha default = 1 = 100% opaco = 0% transparente
-    color.a = 1;
+    if (object_id != GLASS)
+        color.a = 1;
+    else
+        color.a = 0.2;
 
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas

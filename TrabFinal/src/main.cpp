@@ -289,6 +289,14 @@ int main(int argc, char* argv[])
     ComputeNormals(&courtmodel);
     BuildTrianglesAndAddToVirtualScene(&courtmodel);
 
+    ObjModel backboardmodel("../../data/objects/basketball_backboard.obj");
+    ComputeNormals(&backboardmodel);
+    BuildTrianglesAndAddToVirtualScene(&backboardmodel);
+
+    ObjModel glassdmodel("../../data/objects/backboard_glass.obj");
+    ComputeNormals(&glassdmodel);
+    BuildTrianglesAndAddToVirtualScene(&glassdmodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -339,8 +347,8 @@ int main(int argc, char* argv[])
 
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
-        float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float nearplane = -0.2f;  // Posição do "near plane"
+        float farplane  = -20.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -371,10 +379,12 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE 0
-        #define BUNNY  1
-        #define PLANE  2
-        #define COURT  3
+        #define SPHERE    0
+        #define BUNNY     1
+        #define PLANE     2
+        #define COURT     3
+        #define BACKBOARD 4
+        #define GLASS     5
 
         /*
         // Desenhamos o modelo da esfera
@@ -383,14 +393,32 @@ int main(int argc, char* argv[])
         glUniform1i(object_id_uniform, SPHERE);
         DrawVirtualObject("sphere");
         */
+
         // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(g_AngleZ)
-              * Matrix_Rotate_Y(g_AngleY)
-              * Matrix_Rotate_X(g_AngleX);
+        model = Matrix_Translate(10.0f,0.0f,10.0f)
+              * Matrix_Scale(1.0f, 1.0f, 1.0f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, BUNNY);
         DrawVirtualObject("bunny");
+
+        model = Matrix_Translate(10.0f,0.0f,-10.0f)
+              * Matrix_Scale(10.0f, 1.0f, 1.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, BUNNY);
+        DrawVirtualObject("bunny");
+
+        model = Matrix_Translate(-10.0f,0.0f,10.0f)
+              * Matrix_Scale(1.0f, 10.0f, 1.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, BUNNY);
+        DrawVirtualObject("bunny");
+
+        model = Matrix_Translate(-10.0f,0.0f,-10.0f)
+              * Matrix_Scale(1.0f, 50.5f, 1.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, BUNNY);
+        DrawVirtualObject("bunny");
+
         /*
         // Desenhamos o modelo do chão
         model = Matrix_Translate(0.0f, -1.0f, 0.0f)
@@ -405,6 +433,41 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, COURT);
         DrawVirtualObject("basketball_court");
+
+        // Desenhamos o modelo da tabela de basquete de um lado
+        model = Matrix_Translate(-0.9f, 2.9f, 12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(0.8f, 2.9f, 12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(-0.8f, 3.85f, 12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(-0.8f, 2.9f, 12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
+
+        // Desenhamos o modelo da tabela de basquete do outro lado
+        model = Matrix_Translate(-0.9f, 2.9f, -12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(0.8f, 2.9f, -12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(-0.8f, 3.85f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
+        model = Matrix_Translate(-0.8f, 2.9f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
+
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // Desenhamos o modelo do vidro de uma tabela de basquete
+        model = Matrix_Identity();
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, GLASS);
+        DrawVirtualObject("backboard_glass");
+        model = Matrix_Translate(0.0f, 0.0f, 12.875f) * Matrix_Rotate_Y(3.141592) * Matrix_Translate(0.0f, 0.0f, -12.875f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, GLASS);
+        DrawVirtualObject("backboard_glass");
+
+        // Desenhamos o modelo do vidro da outra tabela de basquete
+        model = Matrix_Translate(0.0f, 0.0f, -25.7f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, GLASS);
+        DrawVirtualObject("backboard_glass");
+        model = Matrix_Translate(0.0f, 0.0f, -12.825f) * Matrix_Rotate_Y(3.141592) * Matrix_Translate(0.0f, 0.0f, -12.875f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, GLASS);
+        DrawVirtualObject("backboard_glass");
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
@@ -478,7 +541,7 @@ void MoveFreeCamera()
         camera_position_c -= (u * 0.01f);
     }
 
-    camera_position_c.y = 0.38f;
+    camera_position_c.y = 1.5f;
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
