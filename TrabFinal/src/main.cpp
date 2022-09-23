@@ -180,7 +180,8 @@ glm::vec4 camera_position_c = glm::vec4(0.0f,0.0f,0.0f,1.0f);
 glm::vec4 camera_view_vector;
 glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f);
 glm::vec4 w;
-glm::vec4 u;                //W  S  D  A
+glm::vec4 u;
+glm::vec4 movement_vector;              //W  S  D  A
 int camera_movement_keys[] = {0, 0, 0, 0};
 
 // Váriaveis que controlam o player
@@ -244,7 +245,7 @@ bool g_PlayerIsShooting = false;
 bool g_PlayerIsJumping = false;
 
 // Variáveis da bola
-glm::vec4 ball_position_c = glm::vec4(0.0f,1.2f,0.6f,1.0f);
+glm::vec4 ball_position_c = glm::vec4(0.0f,2.5f,0.6f,1.0f);
 GLfloat ball_t;
 GLfloat ball_time_now;
 GLfloat ball_time_prev;
@@ -274,8 +275,26 @@ GLint object_id_uniform;
 GLint bbox_min_uniform;
 GLint bbox_max_uniform;
 
+GLfloat camera_time_now;
+GLfloat camera_time_prev;
+GLfloat camera_delta_time;
+
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
+
+#define SPHERE             0
+#define BUNNY              1
+#define PLANE              2
+#define COURT              3
+#define BACKBOARD          4
+#define GLASS              5
+#define CUBE               6
+#define CUBE_MAPPING_POS_X 7
+#define CUBE_MAPPING_POS_Y 8
+#define CUBE_MAPPING_POS_Z 9
+#define CUBE_MAPPING_NEG_X 10
+#define CUBE_MAPPING_NEG_Y 11
+#define CUBE_MAPPING_NEG_Z 12
 
 int main(int argc, char* argv[])
 {
@@ -349,8 +368,8 @@ int main(int argc, char* argv[])
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImage0
-    LoadTextureImage("../../data/textures/ball/spalding.png"); // TextureImage1
+    LoadTextureImage("../../data/textures/court/beach_court.png"); //TextureCourt
+    LoadTextureImage("../../data/textures/ball/spalding.png"); // TextureBall
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/objects/sphere.obj");
@@ -397,6 +416,8 @@ int main(int argc, char* argv[])
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
+
+    camera_time_prev = glfwGetTime();
 
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -463,13 +484,6 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE    0
-        #define BUNNY     1
-        #define PLANE     2
-        #define COURT     3
-        #define BACKBOARD 4
-        #define GLASS     5
-
         /*
         // Desenhamos o modelo da esfera
         model = Matrix_Translate(-1.0f,0.0f,0.0f);
@@ -519,6 +533,9 @@ int main(int argc, char* argv[])
         model = Matrix_Translate(-0.8f, 3.85f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
         model = Matrix_Translate(-0.8f, 2.9f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
 
+        // Desenhamos o modelo da bola de basquete
+        DrawBall();
+
         // Desenhamos o modelo do vidro de uma tabela de basquete
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -546,9 +563,6 @@ int main(int argc, char* argv[])
         AnimatePlayerJump();
         AnimatePlayerShot();
         DrawPlayer();
-
-        // Desenhamos o modelo da bola de basquete
-        DrawBall();
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
@@ -601,25 +615,34 @@ void MoveFreeCamera()
     w = -camera_view_vector/norm(camera_view_vector);
     u = crossproduct(camera_up_vector, w)/norm(crossproduct(camera_up_vector, w));
 
+    movement_vector = glm::normalize(glm::vec4(w.x, 0.0f , w.z, 0.0f));
+
+    camera_time_now = glfwGetTime();
+    camera_delta_time = camera_time_now-camera_time_prev;
+
     // Se a tecla W está sendo pressionada (camera_movement_keys[0] = true), movimentamos a câmera para frente.
     if (camera_movement_keys[0])
     {
-        camera_position_c -= (w * 0.05f);
+        camera_position_c -= (movement_vector * camera_delta_time) * 5.0f;
+        g_PlayerIsMoving = true;
     }
     // Se a tecla S está sendo pressionada (camera_movement_keys[1] = true), movimentamos a câmera para trás.
     else if (camera_movement_keys[1])
     {
-        camera_position_c += (w * 0.05f);
+        camera_position_c += (movement_vector * camera_delta_time) * 5.0f;
+        g_PlayerIsMoving = true;
     }
     // Se a tecla D está sendo pressionada (camera_movement_keys[2] = true), movimentamos a câmera para a direita.
     if (camera_movement_keys[2])
     {
-        camera_position_c += (u * 0.05f);
+        camera_position_c += (u * camera_delta_time) * 5.0f;
+        g_PlayerIsMoving = true;
     }
     // Se a tecla A está sendo pressionada (camera_movement_keys[3] = true), movimentamos a câmera para a esquerda.
     else if (camera_movement_keys[3])
     {
-        camera_position_c -= (u * 0.05f);
+        camera_position_c -= (u * camera_delta_time) * 5.0f;
+        g_PlayerIsMoving = true;
     }
 
     if (!g_PlayerIsJumping)
@@ -628,20 +651,20 @@ void MoveFreeCamera()
     }
 
     g_TorsoPositionX = camera_position_c.x;
-    g_TorsoPositionY = camera_position_c.y - 0.5f;
+    g_TorsoPositionY = camera_position_c.y - 0.2f;
     g_TorsoPositionZ = camera_position_c.z;
 
     ball_position_c.x = camera_position_c.x+camera_view_vector.x;
-    ball_position_c.y = camera_position_c.y+camera_view_vector.y-0.5f;
+    ball_position_c.y = camera_position_c.y+camera_view_vector.y - 0.4f;
     ball_position_c.z = camera_position_c.z+camera_view_vector.z;
+
+    camera_time_prev = camera_time_now;
 }
 
 // Função que desenha o jogador através da modelagem de várias instâncias de um cubo
 void DrawPlayer()
 {
-    #define CUBE 4
-
-    #define ALPHA 5
+    float ALPHA = 5.0;
 
     // Cada cópia do cubo possui uma matriz de modelagem independente,
     // já que cada cópia estará em uma posição (rotação, escala, ...)
@@ -656,14 +679,39 @@ void DrawPlayer()
     glm::mat4 model = Matrix_Identity(); // Transformação inicial = identidade.
     glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
 
-    glm::vec4 normalized_view = normalize(camera_view_vector);
-    glm::vec4 cu = glm::vec4(camera_position_c.x, camera_position_c.y, camera_position_c.z, 0);// - normalized_view*1.0f;
+    glm::vec4 cu = glm::vec4(camera_position_c.x, camera_position_c.y, camera_position_c.z, 0) + movement_vector*0.15f;
 
     //printf("%f", std::abs(camera_view_vector.z));
     //printf("%f %f %f", cu.x, cu.y, cu.z);
 
+
+    /*
+    Para desenhar o corpo e guardar as matrizes, os comentários abaixo consideram a
+    seguinte estrutura simplificada do corpo humano
+
+                              - torso (não tem cabeça porque o jogo é em 1º pessoa)
+                             |
+                             v
+
+         braço esquerdo -> / | \ <- braço direito
+    antebraço esquerdo -> |  |  | <- antebraço direito
+          mão esquerda -> .  |  . <- mão direita
+                             |
+           coxa esquerda -> / \ <- coxa direita
+                           /   \
+        perna esquerda -> |     | <- perna direita
+          pé esquerdo -> -       - pé direito
+
+    Será possível ver pelo código abaixo que os antebraços e as mãos estão ligadas
+    aos braços, e as mãos estão ligadas aos antebraços. Ou seja, se um braço é
+    rotacionado, o antebraço e a mão também são, mas se um antebraço é rotacioado,
+    apenas a mão é rotacionado. O mesmo ocorre com os membros inferiores, onde as
+    pernas e os pés estão ligados às coxas, e os pés estão ligados às pernas.
+    */
+
+
     // Translação e rotação inicial do torso
-    model = model * Matrix_Translate(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ)//Matrix_Translate(cu.x, g_TorsoPositionY, cu.z)
+    model = model * Matrix_Translate(cu.x, g_TorsoPositionY, cu.z)
                   * Matrix_Rotate_Y(g_CameraTheta);
     // Guardamos matriz model atual na pilha
     PushMatrix(model);
@@ -773,63 +821,67 @@ void DrawPlayer()
 
     //coxa direita
     PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(-0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para a perna esquerdo
+        model = model * Matrix_Translate(-0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para coxa direita
         PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da perna esquerdo
-            glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-            glUniform1i(object_id_uniform, CUBE);
-            DrawVirtualObject("cube"); // #### COXA DIREITA // Desenhamos a coxa direita
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação do antebraço esquerdo
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do antebraço esquerdo
+            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação da coxa direita
                   * Matrix_Rotate_Z(g_RightThighAngleZ)  // TERCEIRO rotação Z de Euler
                   * Matrix_Rotate_Y(g_RightThighAngleY)  // SEGUNDO rotação Y de Euler
                   * Matrix_Rotate_X(g_RightThighAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do antebraço esquerdo
+            PushMatrix(model); // Guardamos a matriz model atual na pilha
+                model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da coxa direita
                 glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
                 glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### PERNA DIREITA // Desenhamos a perna direita
-                PushMatrix(model);
-                    model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
-                    model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
+                DrawVirtualObject("cube"); // #### COXA DIREITA // Desenhamos a coxa direita
+            PopMatrix(model);
+            PushMatrix(model); // Guardamos matriz model atual na pilha
+                model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação da perna direita
+                PushMatrix(model); // Guardamos matriz model atual na pilha
+                    model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da perna direita
                     glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
                     glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### PÉ DIREITO // Desenhamos o pé direito
-                PopMatrix(model);
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
+                    DrawVirtualObject("cube"); // #### PERNA DIREITA // Desenhamos a perna direita
+                    PushMatrix(model);
+                        model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
+                        model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
+                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
+                        glUniform1i(object_id_uniform, CUBE);
+                        DrawVirtualObject("cube"); // #### PÉ DIREITO // Desenhamos o pé direito
+                    PopMatrix(model);
+                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
+            PopMatrix(model);
         PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
     PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
 
     //coxa esquerda
     PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para o braço esquerdo
+        model = model * Matrix_Translate(0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para a coxa esquerda
         PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do braço esquerdo
-            glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-            glUniform1i(object_id_uniform, CUBE);
-            DrawVirtualObject("cube"); // #### COXA ESQUERDA // Desenhamos a coxa esquerda
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação do antebraço esquerdo
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do antebraço esquerdo
+            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação da coxa esquerda
                   * Matrix_Rotate_Z(g_LeftThighAngleZ)  // TERCEIRO rotação Z de Euler
                   * Matrix_Rotate_Y(g_LeftThighAngleY)  // SEGUNDO rotação Y de Euler
                   * Matrix_Rotate_X(g_LeftThighAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do antebraço esquerdo
+            PushMatrix(model); // Guardamos a matriz model atual na pilha
+                model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da coxa esquerda
                 glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
                 glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### PERNA ESQUERDA // Desenhamos a perna esquerda
-                PushMatrix(model);
-                    model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
-                    model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
+                DrawVirtualObject("cube"); // #### COXA ESQUERDA // Desenhamos a coxa esquerda
+            PopMatrix(model);
+            PushMatrix(model); // Guardamos matriz model atual na pilha
+                model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação da perna esquerda
+                PushMatrix(model); // Guardamos matriz model atual na pilha
+                    model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da perna esquerda
                     glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
                     glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### PÉ ESQUERDO // Desenhamos o pé esquerdo
-                PopMatrix(model);
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
+                    DrawVirtualObject("cube"); // #### PERNA ESQUERDA // Desenhamos a perna direita
+                    PushMatrix(model);
+                        model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
+                        model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
+                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
+                        glUniform1i(object_id_uniform, CUBE);
+                        DrawVirtualObject("cube"); // #### PÉ ESQUERDO // Desenhamos o pé direito
+                    PopMatrix(model);
+                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
+            PopMatrix(model);
         PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
     PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
 }
@@ -940,12 +992,12 @@ void AnimatePlayerJump()
 // Função que anima o arremesso do jogador
 void AnimatePlayerShot()
 {
-    float delta_arm = 5.0f;
-    float max_arm_angle = -2.0f;
+    float delta_arm = 5.0f;//1.0f
+    float max_arm_angle = -1.7f;
 
-    float delta_forearm = 5.0f;
+    float delta_forearm = 5.0f;//1.0f
     float max_right_forearm_angle_x = -0.8f;
-    float max_right_forearm_angle_z = 0.8f;
+    float max_right_forearm_angle_z = 0.8f;//0.1f
     float max_left_forearm_angle_x = -0.8f;
     float max_left_forearm_angle_z = -0.5f;
     float max_right_forearm_angle_shot = 0.0f;
@@ -989,7 +1041,7 @@ void AnimatePlayerShot()
                 if (g_RightArmAngleX <= max_arm_angle)
                 {
                     g_RightArmAngleX = max_arm_angle;
-                    g_LeftArmAngleX = max_arm_angle;
+                    //g_LeftArmAngleX = max_arm_angle;
 
                     player_shooting_animation_part += 1;
 
@@ -1009,11 +1061,13 @@ void AnimatePlayerShot()
                 break;
 
             case 3:
+                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
                 g_RightArmAngleX -= delta_time * delta_arm;
-                g_RightForearmAngleX += delta_time * delta_forearm/2;
-                g_RightForearmAngleZ -= delta_time * delta_forearm/2;
+                g_RightForearmAngleX += delta_time * delta_forearm;
+                g_RightForearmAngleZ -= delta_time * delta_forearm;
+                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
 
-                if (g_RightForearmAngleZ >=  max_right_forearm_angle_shot)
+                if (g_RightForearmAngleZ <=  max_right_forearm_angle_shot)
                 {
                     g_RightForearmAngleX = max_right_forearm_angle_shot;
                     g_RightForearmAngleZ = max_right_forearm_angle_shot;
@@ -1046,13 +1100,11 @@ void AnimatePlayerShot()
 // Função que desenha a bola de basquete quando ela é arremessada
 void DrawBall()
 {
-    #define SPHERE 0
-
     glm::mat4 model = Matrix_Identity();
 
     if (g_BallWasShot)
     {
-        printf("%f\n", ball_t);
+        //printf("%f\n", ball_t);
         ball_time_now = glfwGetTime();
         ball_delta_time = ball_time_now - ball_time_prev;
 
@@ -1061,9 +1113,9 @@ void DrawBall()
                       3*ball_t*powf(1-ball_t,2)*p2 +
                       3*ball_t*ball_t*(1-ball_t)*p3 +
                       powf(ball_t,3)*p4;
-        ball_t += 0.5*ball_delta_time;
+        ball_t += 0.7*ball_delta_time;
 
-        model = Matrix_Translate(c.x,c.y,c.z) * Matrix_Scale(0.2f, 0.2f, 0.2f);
+        model = Matrix_Translate(c.x,c.y,c.z) * Matrix_Scale(0.25f, 0.25f, 0.25f);
 
         if (ball_t >= 1.0f)
         {
@@ -1072,6 +1124,10 @@ void DrawBall()
         }
 
         ball_time_prev = ball_time_now;
+    }
+    else
+    {
+        model = Matrix_Translate(ball_position_c.x,ball_position_c.y,ball_position_c.z) * Matrix_Scale(0.25f, 0.25f, 0.25f);
     }
 
     glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
@@ -1208,9 +1264,8 @@ void LoadShadersFromFiles()
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(program_id);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage0"), 0);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage1"), 1);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(program_id, "TextureCourt"), 0);
+    glUniform1i(glGetUniformLocation(program_id, "TextureBall"), 1);
     glUseProgram(0);
 }
 
@@ -1848,7 +1903,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[0] = 1;
-            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca W como false
         else if (action == GLFW_RELEASE)
@@ -1866,13 +1920,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[1] = 1;
-            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca S como false
         else if (action == GLFW_RELEASE)
         {
             camera_movement_keys[1] = 0;
-            g_PlayerIsMoving = false;
         }
     }
     // Se o usuário apertar a tecla D,
@@ -1884,7 +1936,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[2] = 1;
-            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca D como false
         else if (action == GLFW_RELEASE)
@@ -1902,7 +1953,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[3] = 1;
-            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca A como false
         else if (action == GLFW_RELEASE)

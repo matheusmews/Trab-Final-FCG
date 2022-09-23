@@ -19,12 +19,19 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE    0
-#define BUNNY     1
-#define PLANE     2
-#define COURT     3
-#define BACKBOARD 4
-#define GLASS     5
+#define SPHERE             0
+#define BUNNY              1
+#define PLANE              2
+#define COURT              3
+#define BACKBOARD          4
+#define GLASS              5
+#define CUBE               6
+#define CUBE_MAPPING_POS_X 7
+#define CUBE_MAPPING_POS_Y 8
+#define CUBE_MAPPING_POS_Z 9
+#define CUBE_MAPPING_NEG_X 10
+#define CUBE_MAPPING_NEG_Y 11
+#define CUBE_MAPPING_NEG_Z 12
 
 uniform int object_id;
 
@@ -33,9 +40,8 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D TextureImage0;
-uniform sampler2D TextureImage1;
-uniform sampler2D TextureImage2;
+uniform sampler2D TextureCourt;
+uniform sampler2D TextureBall;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -72,6 +78,9 @@ void main()
     float U = 0.0;
     float V = 0.0;
 
+    // Refletância difusa a partir da leitura da imagem de textura (depende do object_id)
+    vec3 Kd;
+
     if ( object_id == SPHERE )
     {
         // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
@@ -99,6 +108,8 @@ void main()
 
         U = (theta + M_PI)/(2*M_PI);
         V = (phi + M_PI_2)/M_PI;
+
+        Kd = texture(TextureBall, vec2(U,V)).rgb;
     }
     else if ( object_id == BUNNY )
     {
@@ -142,21 +153,86 @@ void main()
 
         U = (position_model.z - minz)/(maxz - minz);
         V = (position_model.x - minx)/(maxx - minx);
-    }
 
-    // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-    vec3 Kd1 = texture(TextureImage1, vec2(U,V)).rgb;
+        Kd = texture(TextureCourt, vec2(U,V)).rgb;
+    }
+    else if ( object_id == CUBE )
+    {
+        /*
+        float absX = fabs(position_model.x);
+        float absY = fabs(position_model.y);
+        float absZ = fabs(position_model.z);
+
+        int isXPositive = x > 0 ? 1 : 0;
+        int isYPositive = y > 0 ? 1 : 0;
+        int isZPositive = z > 0 ? 1 : 0;
+
+        float maxAxis, uc, vc;
+
+        // POSITIVE X
+        if (isXPositive && absX >= absY && absX >= absZ) {
+        // u (0 to 1) goes from +z to -z
+        // v (0 to 1) goes from -y to +y
+        maxAxis = absX;
+        uc = -z;
+        vc = y;
+        *index = 0;
+        }
+        // NEGATIVE X
+        if (!isXPositive && absX >= absY && absX >= absZ) {
+        // u (0 to 1) goes from -z to +z
+        // v (0 to 1) goes from -y to +y
+        maxAxis = absX;
+        uc = z;
+        vc = y;
+        *index = 1;
+        }
+        // POSITIVE Y
+        if (isYPositive && absY >= absX && absY >= absZ) {
+        // u (0 to 1) goes from -x to +x
+        // v (0 to 1) goes from +z to -z
+        maxAxis = absY;
+        uc = x;
+        vc = -z;
+        *index = 2;
+        }
+        // NEGATIVE Y
+        if (!isYPositive && absY >= absX && absY >= absZ) {
+        // u (0 to 1) goes from -x to +x
+        // v (0 to 1) goes from -z to +z
+        maxAxis = absY;
+        uc = x;
+        vc = z;
+        *index = 3;
+        }
+        // POSITIVE Z
+        if (isZPositive && absZ >= absX && absZ >= absY) {
+        // u (0 to 1) goes from -x to +x
+        // v (0 to 1) goes from -y to +y
+        maxAxis = absZ;
+        uc = x;
+        vc = y;
+        *index = 4;
+        }
+        // NEGATIVE Z
+        if (!isZPositive && absZ >= absX && absZ >= absY) {
+        // u (0 to 1) goes from +x to -x
+        // v (0 to 1) goes from -y to +y
+        maxAxis = absZ;
+        uc = -x;
+        vc = y;
+        *index = 5;
+        }
+
+        // Convert range from -1 to 1 to 0 to 1
+        *u = 0.5f * (uc / maxAxis + 1.0f);
+        *v = 0.5f * (vc / maxAxis + 1.0f);*/
+    }
 
     // Equação de Iluminação
     float lambert = max(0, dot(n,l));
 
-    if (object_id == SPHERE)
-        color.rgb = Kd1 * (lambert + 0.01);
-    //else if (object_id == COURT || objetc_id == BUNNY)
-    //    color.rgb = Kd0 * (lambert + 0.01);
-    else
-        color.rgb = Kd0 * (lambert + 0.01);
+    color.rgb = Kd * (lambert + 0.01);
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
