@@ -19,19 +19,15 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE             0
-#define BUNNY              1
-#define PLANE              2
-#define COURT              3
-#define BACKBOARD          4
-#define GLASS              5
-#define CUBE               6
-#define CUBE_MAPPING_POS_X 7
-#define CUBE_MAPPING_POS_Y 8
-#define CUBE_MAPPING_POS_Z 9
-#define CUBE_MAPPING_NEG_X 10
-#define CUBE_MAPPING_NEG_Y 11
-#define CUBE_MAPPING_NEG_Z 12
+#define SPHERE     0
+#define BUNNY      1
+#define PLANE      2
+#define COURT      3
+#define BACKBOARD  4
+#define BACKGROUND 5
+#define GLASS      6
+#define CUBE       7
+#define HAND       8
 
 uniform int object_id;
 
@@ -40,8 +36,9 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D TextureCourt;
-uniform sampler2D TextureBall;
+uniform sampler2D TextureImage0;
+uniform sampler2D TextureImage1;
+uniform sampler2D TextureImage2;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -69,7 +66,7 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+    vec4 l = normalize(vec4(0.0,30.0,0.0,0.0));
 
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
@@ -77,9 +74,6 @@ void main()
     // Coordenadas de textura U e V
     float U = 0.0;
     float V = 0.0;
-
-    // Refletância difusa a partir da leitura da imagem de textura (depende do object_id)
-    vec3 Kd;
 
     if ( object_id == SPHERE )
     {
@@ -108,10 +102,8 @@ void main()
 
         U = (theta + M_PI)/(2*M_PI);
         V = (phi + M_PI_2)/M_PI;
-
-        Kd = texture(TextureBall, vec2(U,V)).rgb;
     }
-    else if ( object_id == BUNNY )
+    else if ( object_id == BUNNY)
     {
         // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
         // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
@@ -134,13 +126,13 @@ void main()
         U = (position_model.x - minx)/(maxx - minx);
         V = (position_model.y - miny)/(maxy - miny);
     }
-    else if ( object_id == PLANE )
+    else if ( object_id == PLANE)
     {
         // Coordenadas de textura do plano, obtidas do arquivo OBJ.
         U = texcoords.x;
         V = texcoords.y;
     }
-    else if ( object_id == COURT )
+    else if ( object_id == COURT)
     {
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
@@ -153,86 +145,40 @@ void main()
 
         U = (position_model.z - minz)/(maxz - minz);
         V = (position_model.x - minx)/(maxx - minx);
-
-        Kd = texture(TextureCourt, vec2(U,V)).rgb;
     }
-    else if ( object_id == CUBE )
+    else if (object_id == BACKGROUND)
     {
-        /*
-        float absX = fabs(position_model.x);
-        float absY = fabs(position_model.y);
-        float absZ = fabs(position_model.z);
+        float minx = bbox_min.x;
+        float maxx = bbox_max.x;
 
-        int isXPositive = x > 0 ? 1 : 0;
-        int isYPositive = y > 0 ? 1 : 0;
-        int isZPositive = z > 0 ? 1 : 0;
+        float miny = bbox_min.y;
+        float maxy = bbox_max.y;
 
-        float maxAxis, uc, vc;
+        float minz = bbox_min.z;
+        float maxz = bbox_max.z;
 
-        // POSITIVE X
-        if (isXPositive && absX >= absY && absX >= absZ) {
-        // u (0 to 1) goes from +z to -z
-        // v (0 to 1) goes from -y to +y
-        maxAxis = absX;
-        uc = -z;
-        vc = y;
-        *index = 0;
-        }
-        // NEGATIVE X
-        if (!isXPositive && absX >= absY && absX >= absZ) {
-        // u (0 to 1) goes from -z to +z
-        // v (0 to 1) goes from -y to +y
-        maxAxis = absX;
-        uc = z;
-        vc = y;
-        *index = 1;
-        }
-        // POSITIVE Y
-        if (isYPositive && absY >= absX && absY >= absZ) {
-        // u (0 to 1) goes from -x to +x
-        // v (0 to 1) goes from +z to -z
-        maxAxis = absY;
-        uc = x;
-        vc = -z;
-        *index = 2;
-        }
-        // NEGATIVE Y
-        if (!isYPositive && absY >= absX && absY >= absZ) {
-        // u (0 to 1) goes from -x to +x
-        // v (0 to 1) goes from -z to +z
-        maxAxis = absY;
-        uc = x;
-        vc = z;
-        *index = 3;
-        }
-        // POSITIVE Z
-        if (isZPositive && absZ >= absX && absZ >= absY) {
-        // u (0 to 1) goes from -x to +x
-        // v (0 to 1) goes from -y to +y
-        maxAxis = absZ;
-        uc = x;
-        vc = y;
-        *index = 4;
-        }
-        // NEGATIVE Z
-        if (!isZPositive && absZ >= absX && absZ >= absY) {
-        // u (0 to 1) goes from +x to -x
-        // v (0 to 1) goes from -y to +y
-        maxAxis = absZ;
-        uc = -x;
-        vc = y;
-        *index = 5;
-        }
-
-        // Convert range from -1 to 1 to 0 to 1
-        *u = 0.5f * (uc / maxAxis + 1.0f);
-        *v = 0.5f * (vc / maxAxis + 1.0f);*/
+        U = (position_model.z - minz)/(maxz - minz);
+        V = (position_model.y - miny)/(maxy - miny);
     }
+
+    // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
+    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+    vec3 Kd1 = texture(TextureImage1, vec2(U,V)).rgb;
+    vec3 Kd2 = texture(TextureImage2, vec2(U,V)).rgb;
 
     // Equação de Iluminação
     float lambert = max(0, dot(n,l));
 
-    color.rgb = Kd * (lambert + 0.01);
+    if (object_id == SPHERE)
+        color.rgb = Kd1 * (lambert + 0.01);
+    else if (object_id == COURT || object_id == BUNNY)
+        color.rgb = Kd0 * (lambert + 0.01);
+    else if (object_id == BACKGROUND)
+        color.rgb = Kd2;// * (lambert + 0.01);
+    else if (object_id == CUBE)
+        color.rgb = vec3(0.5f, 0.5f, 0.5f) * (lambert + 0.01);
+    else
+        color.rgb = vec3(0.0f, 0.0f, 0.0f) * (lambert + 0.01);
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
@@ -249,7 +195,7 @@ void main()
     if (object_id != GLASS)
         color.a = 1;
     else
-        color.a = 0.2;
+        color.a = 0.1;
 
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas

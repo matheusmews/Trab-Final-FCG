@@ -29,6 +29,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <iostream>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -47,6 +48,10 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
+#include "textrendering.h"
+#include "shader.h"
+#include "scenario.h"
+#include "camera.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -75,20 +80,22 @@ struct ObjModel
     }
 };
 
-
-// Declaração de funções utilizadas para pilha de matrizes de modelagem.
-void PushMatrix(glm::mat4 M);
-void PopMatrix(glm::mat4& M);
+// Definimos uma estrutura que armazenará dados necessários para renderizar
+// cada objeto da cena virtual.
+struct SceneObject
+{
+    std::string  name;        // Nome do objeto
+    size_t       first_index; // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
+    size_t       num_indices; // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
+    GLenum       rendering_mode; // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
+    GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
+    glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
+    glm::vec3    bbox_max;
+    Shader       sh_hoff;
+};
 
 // Declaração de várias funções utilizadas em main().  Essas estão definidas
 // logo após a definição de main() neste arquivo.
-void MoveFreeCamera(); // Movimenta a câmera baseado nas teclas W, S, A, D e na movimentação do mouse
-void DrawStuff(); // Desenha muitas coisas
-void DrawPlayer(); // Desenha o jogador através da modelagem de várias instâncias de um cubo
-void AnimatePlayerMovement(); // Anima a movimentação do jogador
-void AnimatePlayerJump(); // Anima o pulo do jogador
-void AnimatePlayerShot(); // Anima o arremesso do jogador
-void DrawBall(); // Desenha a bola de basquete
 
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
@@ -101,25 +108,6 @@ void LoadShader(const char* filename, GLuint shader_id); // Função utilizada p
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
 
-// Declaração de funções auxiliares para renderizar texto dentro da janela
-// OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
-void TextRendering_Init();
-float TextRendering_LineHeight(GLFWwindow* window);
-float TextRendering_CharWidth(GLFWwindow* window);
-void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrix(GLFWwindow* window, glm::mat4 M, float x, float y, float scale = 1.0f);
-void TextRendering_PrintVector(GLFWwindow* window, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProduct(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProductMoreDigits(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProductDivW(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
-
-// Funções abaixo renderizam como texto na janela OpenGL algumas matrizes e
-// outras informações do programa. Definidas após main().
-void TextRendering_ShowModelViewProjection(GLFWwindow* window, glm::mat4 projection, glm::mat4 view, glm::mat4 model, glm::vec4 p_model);
-void TextRendering_ShowEulerAngles(GLFWwindow* window);
-void TextRendering_ShowProjection(GLFWwindow* window);
-void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
-
 // Funções callback para comunicação com o sistema operacional e interação do
 // usuário. Veja mais comentários nas definições das mesmas, abaixo.
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -129,18 +117,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-// Definimos uma estrutura que armazenará dados necessários para renderizar
-// cada objeto da cena virtual.
-struct SceneObject
-{
-    std::string  name;        // Nome do objeto
-    size_t       first_index; // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    size_t       num_indices; // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    GLenum       rendering_mode; // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
-    GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
-    glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
-    glm::vec3    bbox_max;
-};
+void RenderObject(std::string object_name, glm::mat4 model, int object_id);
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -149,9 +126,6 @@ struct SceneObject
 // objetos dentro da variável g_VirtualScene, e veja na função main() como
 // estes são acessados.
 std::map<std::string, SceneObject> g_VirtualScene;
-
-// Pilha que guardará as matrizes de modelagem.
-std::stack<glm::mat4>  g_MatrixStack;
 
 // Razão de proporção da janela (largura/altura). Veja função FramebufferSizeCallback().
 float g_ScreenRatio = 1.0f;
@@ -167,103 +141,6 @@ bool g_LeftMouseButtonPressed = false;
 bool g_RightMouseButtonPressed = false; // Análogo para botão direito do mouse
 bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mouse
 
-// Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
-// usuário através do mouse (veja função CursorPosCallback()). A posição
-// efetiva da câmera é calculada dentro da função main(), dentro do loop de
-// renderização.
-float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
-float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
-float g_CameraDistance = 2.5f; // Distância da câmera para a origem
-
-// Variáveis da câmera Free Camera
-glm::vec4 camera_position_c = glm::vec4(0.0f,0.0f,0.0f,1.0f);
-glm::vec4 camera_view_vector;
-glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f);
-glm::vec4 w;
-glm::vec4 u;
-glm::vec4 movement_vector;              //W  S  D  A
-int camera_movement_keys[] = {0, 0, 0, 0};
-
-// Váriaveis que controlam o player
-// Variáveis que controlam as animações do player
-GLfloat time_now;
-GLfloat time_prev;
-GLfloat delta_time;
-// Variáveis que controlam as animações da movimentação do player
-GLint right_arm_movement_animation_direction = 1;
-GLint left_arm_movement_animation_direction = -1;
-GLint right_thigh_movement_animation_direction = -1;
-GLint left_thigh_movement_animation_direction = 1;
-// Variáveis que controlam as animações do pulo do player
-GLint jump_direction = 1;
-// Variáveis que controlam as animações do arremesso do player
-GLint player_shooting_animation_part = 1;
-// Variáveis que controlam translação do torso
-float g_TorsoPositionX = 0.0f;
-float g_TorsoPositionY = 0.32f;
-float g_TorsoPositionZ = 0.0f;
-// Variáveis que controlam rotação do braço direito
-float g_RightArmAngleX = 0.0f;
-float g_RightArmAngleY = 0.0f;
-float g_RightArmAngleZ = 0.0f;
-// Variáveis que controlam rotação do braço esquerdo
-float g_LeftArmAngleX = 0.0f;
-float g_LeftArmAngleY = 0.0f;
-float g_LeftArmAngleZ = 0.0f;
-// Variáveis que controlam rotação do antebraço direito
-float g_RightForearmAngleX = 0.0f;
-float g_RightForearmAngleY = 0.0f;
-float g_RightForearmAngleZ = 0.0f;
-// Variáveis que controlam rotação do antebraço esquerdo
-float g_LeftForearmAngleX = 0.0f;
-float g_LeftForearmAngleY = 0.0f;
-float g_LeftForearmAngleZ = 0.0f;
-// Variáveis que controlam rotação da mão direita (do arremesso)
-float g_RightHandAngleX = 0.0f;
-float g_RightHandAngleY = 0.0f;
-float g_RightHandAngleZ = 0.0f;
-// Variáveis que controlam rotação da perna direita
-float g_RightLegAngleX = 0.0f;
-float g_RightLegAngleY = 0.0f;
-float g_RightLegAngleZ = 0.0f;
-// Variáveis que controlam rotação da perna esquerda
-float g_LeftLegAngleX = 0.0f;
-float g_LeftLegAngleY = 0.0f;
-float g_LeftLegAngleZ = 0.0f;
-// Variáveis que controlam rotação da coxa direita
-float g_RightThighAngleX = 0.0f;
-float g_RightThighAngleY = 0.0f;
-float g_RightThighAngleZ = 0.0f;
-// Variáveis que controlam rotação da coxa esquerda
-float g_LeftThighAngleX = 0.0f;
-float g_LeftThighAngleY = 0.0f;
-float g_LeftThighAngleZ = 0.0f;
-
-// Flags que controlam o player
-bool g_PlayerIsMoving = false;
-bool g_PlayerIsShooting = false;
-bool g_PlayerIsJumping = false;
-
-// Variáveis da bola
-glm::vec4 ball_position_c = glm::vec4(0.0f,2.5f,0.6f,1.0f);
-GLfloat ball_t;
-GLfloat ball_time_now;
-GLfloat ball_time_prev;
-GLfloat ball_delta_time;
-// Pontos de controle da parábola da bola
-glm::vec4 p1 = glm::vec4(0.0f,1.0f,0.0f,1.0f);
-glm::vec4 p2 = glm::vec4(0.0f,2.85f,0.0f,1.0f);
-glm::vec4 p3 = glm::vec4(0.0f,4.0f,0.0f,1.0f);
-glm::vec4 p4 = glm::vec4(0.0f,0.0f,0.0f,1.0f);
-// Flags que controlam a animação da bola
-bool g_BallWasShot = false;
-
-// Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
-bool g_UsePerspectiveProjection = true;
-
-// Variável que controla se o texto informativo será mostrado na tela.
-bool g_ShowInfoText = true;
-
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint vertex_shader_id;
 GLuint fragment_shader_id;
@@ -275,26 +152,21 @@ GLint object_id_uniform;
 GLint bbox_min_uniform;
 GLint bbox_max_uniform;
 
-GLfloat camera_time_now;
-GLfloat camera_time_prev;
-GLfloat camera_delta_time;
+// SHADEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEER
+Shader sh_hoff;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
-#define SPHERE             0
-#define BUNNY              1
-#define PLANE              2
-#define COURT              3
-#define BACKBOARD          4
-#define GLASS              5
-#define CUBE               6
-#define CUBE_MAPPING_POS_X 7
-#define CUBE_MAPPING_POS_Y 8
-#define CUBE_MAPPING_POS_Z 9
-#define CUBE_MAPPING_NEG_X 10
-#define CUBE_MAPPING_NEG_Y 11
-#define CUBE_MAPPING_NEG_Z 12
+#define SPHERE     0
+#define BUNNY      1
+#define PLANE      2
+#define COURT      3
+#define BACKBOARD  4
+#define BACKGROUND 5
+#define GLASS      6
+#define CUBE       7
+#define HAND       8
 
 int main(int argc, char* argv[])
 {
@@ -365,11 +237,13 @@ int main(int argc, char* argv[])
 
     // Carregamos os shaders de vértices e de fragmentos que serão utilizados
     // para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
-    LoadShadersFromFiles();
+    // LoadShadersFromFiles();
+    sh_hoff = Shader("../../src/shader_vertex.glsl","../../src/shader_fragment.glsl");
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/court/beach_court.png"); //TextureCourt
-    LoadTextureImage("../../data/textures/ball/spalding.png"); // TextureBall
+    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImage0
+    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImage1
+    LoadTextureImage("../../data/textures/court/stadium_background.png");  // TextureImage2
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/objects/sphere.obj");
@@ -396,9 +270,13 @@ int main(int argc, char* argv[])
     ComputeNormals(&backboardmodel);
     BuildTrianglesAndAddToVirtualScene(&backboardmodel);
 
-    ObjModel glassdmodel("../../data/objects/backboard_glass.obj");
-    ComputeNormals(&glassdmodel);
-    BuildTrianglesAndAddToVirtualScene(&glassdmodel);
+    ObjModel glassmodel("../../data/objects/backboard_glass.obj");
+    ComputeNormals(&glassmodel);
+    BuildTrianglesAndAddToVirtualScene(&glassmodel);
+
+    ObjModel background("../../data/objects/background.obj");
+    ComputeNormals(&background);
+    BuildTrianglesAndAddToVirtualScene(&background);
 
     if ( argc > 1 )
     {
@@ -428,149 +306,41 @@ int main(int argc, char* argv[])
         // definida como coeficientes RGBA: Red, Green, Blue, Alpha; isto é:
         // Vermelho, Verde, Azul, Alpha (valor de transparência).
         // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
-        //
-        //           R     G     B     A
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
         // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
         // e também resetamos todos os pixels do Z-buffer (depth buffer).
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
-        // os shaders de vértice e fragmentos).
-        glUseProgram(program_id);
-
         // Movimenta a câmera
         MoveFreeCamera();
 
-        // Computamos a matriz "View" utilizando os parâmetros da câmera para
-        // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
 
-        // Agora computamos a matriz de Projeção.
-        glm::mat4 projection;
-
-        // Note que, no sistema de coordenadas da câmera, os planos near e far
-        // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
-        float nearplane = -0.2f;  // Posição do "near plane"
-        float farplane  = -40.0f; // Posição do "far plane"
-
-        if (g_UsePerspectiveProjection)
-        {
-            // Projeção Perspectiva.
-            // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
-            float field_of_view = 3.141592 / 3.0f;
-            projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
-        }
-        else
-        {
-            // Projeção Ortográfica.
-            // Para definição dos valores l, r, b, t ("left", "right", "bottom", "top"),
-            // PARA PROJEÇÃO ORTOGRÁFICA veja slides 219-224 do documento Aula_09_Projecoes.pdf.
-            // Para simular um "zoom" ortográfico, computamos o valor de "t"
-            // utilizando a variável g_CameraDistance.
-            float t = 1.5f*g_CameraDistance/2.5f;
-            float b = -t;
-            float r = t*g_ScreenRatio;
-            float l = -r;
-            projection = Matrix_Orthographic(l, r, b, t, nearplane, farplane);
-        }
-
-        glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
-
-        // Enviamos as matrizes "view" e "projection" para a placa de vídeo
-        // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
-        // efetivamente aplicadas em todos os pontos.
-        glUniformMatrix4fv(view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
-        glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
-
-        /*
-        // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, SPHERE);
-        DrawVirtualObject("sphere");
-
-        // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(g_AngleZ)
-              * Matrix_Rotate_Y(g_AngleY)
-              * Matrix_Rotate_X(g_AngleX);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, BUNNY);
-        DrawVirtualObject("bunny");
-
-        // Desenhamos o modelo do chão
-        model = Matrix_Translate(0.0f, -1.0f, 0.0f)
-              * Matrix_Scale(2.0f, 1.0f, 2.0f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, PLANE);
-        DrawVirtualObject("plane");
-        */
-
-        // TEEEEEEEEEEEEETOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-        model = Matrix_Rotate_X(3.14)
-              * Matrix_Translate(0, -1.9f, 0);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, COURT);
-        DrawVirtualObject("basketball_court");
-
-        // Desenhamos o modelo da quadra de basquete
-        model = Matrix_Identity();
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, COURT);
-        DrawVirtualObject("basketball_court");
-
-        // Desenhamos o modelo da tabela de basquete de um lado
-        model = Matrix_Translate(-0.9f, 2.9f, 12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(0.8f, 2.9f, 12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(-0.8f, 3.85f, 12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(-0.8f, 2.9f, 12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
-
-        // Desenhamos o modelo da tabela de basquete do outro lado
-        model = Matrix_Translate(-0.9f, 2.9f, -12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(0.8f, 2.9f, -12.85f) * Matrix_Scale(1.0f, 10.5f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD); DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(-0.8f, 3.85f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
-        model = Matrix_Translate(-0.8f, 2.9f, -12.85f) * Matrix_Scale(16.0f, 1.0f, 1.0f); glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model)); glUniform1i(object_id_uniform, BACKBOARD);DrawVirtualObject("basketball_backboard");
-
+        // DESENHOS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        glm::mat4 model = Matrix_Identity();
+        // Desenhamos o modelo do chão da quadra
+        model = TransformCourt();
+        RenderObject("basketball_court",model,COURT);
+        // Desenhamos o modelo do plano de fundo do cenário
+        //TransformBackground();
+        //RenderObject("basketball_background",model,BACKGROUND);
+        // Desenhamos o modelo das tabelas de basquete
+        for (auto cur_model : TransformBackboard())
+            RenderObject("basketball_backboard",cur_model,BACKBOARD);
         // Desenhamos o modelo da bola de basquete
-        DrawBall();
-
+        model = TransformBall();
+        RenderObject("sphere",model,SPHERE);
         // Desenhamos o modelo do vidro de uma tabela de basquete
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        model = Matrix_Identity();
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, GLASS);
-        DrawVirtualObject("backboard_glass");
-        model = Matrix_Translate(0.0f, 0.0f, 12.875f) * Matrix_Rotate_Y(3.141592) * Matrix_Translate(0.0f, 0.0f, -12.875f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, GLASS);
-        DrawVirtualObject("backboard_glass");
-
-        // Desenhamos o modelo do vidro da outra tabela de basquete
-        model = Matrix_Translate(0.0f, 0.0f, -25.7f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, GLASS);
-        DrawVirtualObject("backboard_glass");
-        model = Matrix_Translate(0.0f, 0.0f, -12.825f) * Matrix_Rotate_Y(3.141592) * Matrix_Translate(0.0f, 0.0f, -12.875f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, GLASS);
-        DrawVirtualObject("backboard_glass");
-
+        for (auto cur_model : TransformGlass())
+            RenderObject("backboard_glass",cur_model,GLASS);
         // Desenhamos o modelo do jogador
-        AnimatePlayerMovement();
-        AnimatePlayerJump();
-        AnimatePlayerShot();
-        DrawPlayer();
+        AnimatePlayerMovement(); AnimatePlayerJump(); AnimatePlayerShot();
+        for (auto cur_model : TransformPlayer())
+            RenderObject("cube",cur_model,CUBE);
 
-        // Imprimimos na tela os ângulos de Euler que controlam a rotação do
-        // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
 
         // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
         TextRendering_ShowProjection(window);
-
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
         TextRendering_ShowFramesPerSecond(window);
@@ -597,542 +367,72 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-// Função que movimenta a câmera baseado nas teclas W, S, A, D e na movimentação do mouse
-void MoveFreeCamera()
+// FUNÇÃO FODA
+void RenderObject(std::string object_name, glm::mat4 model, int object_id)
 {
-    // Computamos a posição da câmera utilizando coordenadas esféricas.  As
-    // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
-    // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
-    // e ScrollCallback().
-    float y = sin(g_CameraPhi);
-    float z = cos(g_CameraPhi)*cos(g_CameraTheta);
-    float x = cos(g_CameraPhi)*sin(g_CameraTheta);
-
-    // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-    // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-    camera_view_vector = glm::vec4(x,y,z,0.0f); // Vetor "view", sentido para onde a câmera está virada
-
-    w = -camera_view_vector/norm(camera_view_vector);
-    u = crossproduct(camera_up_vector, w)/norm(crossproduct(camera_up_vector, w));
-
-    movement_vector = glm::normalize(glm::vec4(w.x, 0.0f , w.z, 0.0f));
-
-    camera_time_now = glfwGetTime();
-    camera_delta_time = camera_time_now-camera_time_prev;
-
-    // Se a tecla W está sendo pressionada (camera_movement_keys[0] = true), movimentamos a câmera para frente.
-    if (camera_movement_keys[0])
-    {
-        camera_position_c -= (movement_vector * camera_delta_time) * 5.0f;
-        g_PlayerIsMoving = true;
-    }
-    // Se a tecla S está sendo pressionada (camera_movement_keys[1] = true), movimentamos a câmera para trás.
-    else if (camera_movement_keys[1])
-    {
-        camera_position_c += (movement_vector * camera_delta_time) * 5.0f;
-        g_PlayerIsMoving = true;
-    }
-    // Se a tecla D está sendo pressionada (camera_movement_keys[2] = true), movimentamos a câmera para a direita.
-    if (camera_movement_keys[2])
-    {
-        camera_position_c += (u * camera_delta_time) * 5.0f;
-        g_PlayerIsMoving = true;
-    }
-    // Se a tecla A está sendo pressionada (camera_movement_keys[3] = true), movimentamos a câmera para a esquerda.
-    else if (camera_movement_keys[3])
-    {
-        camera_position_c -= (u * camera_delta_time) * 5.0f;
-        g_PlayerIsMoving = true;
-    }
-
-    if (!g_PlayerIsJumping)
-    {
-        camera_position_c.y = 2.06f;
-    }
-
-    g_TorsoPositionX = camera_position_c.x;
-    g_TorsoPositionY = camera_position_c.y - 0.2f;
-    g_TorsoPositionZ = camera_position_c.z;
-
-    ball_position_c.x = camera_position_c.x+camera_view_vector.x;
-    ball_position_c.y = camera_position_c.y+camera_view_vector.y - 0.4f;
-    ball_position_c.z = camera_position_c.z+camera_view_vector.z;
-
-    camera_time_prev = camera_time_now;
-}
-
-// Função que desenha o jogador através da modelagem de várias instâncias de um cubo
-void DrawPlayer()
-{
-    float ALPHA = 5.0;
-
-    // Cada cópia do cubo possui uma matriz de modelagem independente,
-    // já que cada cópia estará em uma posição (rotação, escala, ...)
-    // diferente em relação ao espaço global (World Coordinates). Veja
-    // slides 2-14 e 184-190 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-    //
-    // Entretanto, neste laboratório as matrizes de modelagem dos cubos
-    // serão construídas de maneira hierárquica, tal que operações em
-    // alguns objetos influenciem outros objetos. Por exemplo: ao
-    // transladar o torso, a cabeça deve se movimentar junto.
-    // Veja slides 243-273 do documento Aula_08_Sistemas_de_Coordenadas.pdf
-    glm::mat4 model = Matrix_Identity(); // Transformação inicial = identidade.
-    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-
-    glm::vec4 cu = glm::vec4(camera_position_c.x, camera_position_c.y, camera_position_c.z, 0) + movement_vector*0.15f;
-
-    //printf("%f", std::abs(camera_view_vector.z));
-    //printf("%f %f %f", cu.x, cu.y, cu.z);
-
-
-    /*
-    Para desenhar o corpo e guardar as matrizes, os comentários abaixo consideram a
-    seguinte estrutura simplificada do corpo humano
-
-                              - torso (não tem cabeça porque o jogo é em 1º pessoa)
-                             |
-                             v
-
-         braço esquerdo -> / | \ <- braço direito
-    antebraço esquerdo -> |  |  | <- antebraço direito
-          mão esquerda -> .  |  . <- mão direita
-                             |
-           coxa esquerda -> / \ <- coxa direita
-                           /   \
-        perna esquerda -> |     | <- perna direita
-          pé esquerdo -> -       - pé direito
-
-    Será possível ver pelo código abaixo que os antebraços e as mãos estão ligadas
-    aos braços, e as mãos estão ligadas aos antebraços. Ou seja, se um braço é
-    rotacionado, o antebraço e a mão também são, mas se um antebraço é rotacioado,
-    apenas a mão é rotacionado. O mesmo ocorre com os membros inferiores, onde as
-    pernas e os pés estão ligados às coxas, e os pés estão ligados às pernas.
+    /* funcao chamada pra todo objeto que quero rendenizar no frame
+    tem que usar o shader
+    setar matriz do shader com informacao de model e cam
+    setar parametros do fragment
+    bindar o vao
+    glview port *
+    ordem de transparencia *
+    chamar a drawelement
     */
 
+    // Pega o SceneObject do objeto que foi passado como parâmetro
+    SceneObject theobject = g_VirtualScene[object_name];
 
-    // Translação e rotação inicial do torso
-    model = model * Matrix_Translate(cu.x, g_TorsoPositionY, cu.z)
-                  * Matrix_Rotate_Y(g_CameraTheta);
-    // Guardamos matriz model atual na pilha
-    PushMatrix(model);
-        // Atualizamos a matriz model (multiplicação à direita) para fazer um escalamento do torso
-        model = model * Matrix_Scale(0.1f*ALPHA, 0.125f*ALPHA, 0.025f*ALPHA);
-        // Enviamos a matriz "model" para a placa de vídeo (GPU). Veja o
-        // arquivo "shader_vertex.glsl", onde esta é efetivamente
-        // aplicada em todos os pontos.
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, CUBE);
-        // Desenhamos um cubo. Esta renderização irá executar o Vertex
-        // Shader definido no arquivo "shader_vertex.glsl", e o mesmo irá
-        // utilizar as matrizes "model", "view" e "projection" definidas
-        // acima e já enviadas para a placa de vídeo (GPU).
-        DrawVirtualObject("cube"); // #### TORSO
-    // Tiramos da pilha a matriz model guardada anteriormente
-    PopMatrix(model);
+    // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
+    // os shaders de vértice e fragmentos).
+    // glUseProgram(program_id);
+    Shader current_used_shader = theobject.sh_hoff;
+    current_used_shader.use();
 
-    /*
-    //cabeça
-    PushMatrix(model);
-        model = model * Matrix_Translate(0.0f, 0.00625f, 0.0f);
-        model = model; // Atualizamos matriz model (multiplicação à direita) com a rotação da cabeça
-              //* Matrix_Rotate_Z(g_AngleZ)  // TERCEIRO rotação Z de Euler
-              //* Matrix_Rotate_Y(-g_AngleY)  // SEGUNDO rotação Y de Euler
-              //* Matrix_Rotate_X(-g_AngleX); // PRIMEIRO rotação X de Euler
-        model = model * Matrix_Scale(-0.04f, -0.045f, 0.04f);
-        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-        glUniform1i(object_id_uniform, CUBE);
-        DrawVirtualObject("cube"); // #### CABEÇA // Desenhamos o cabeça
-    PopMatrix(model);
-    */
+    // Enviamos as matrizes "view" e "projection" para a placa de vídeo
+    // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
+    // efetivamente aplicadas em todos os pontos.
+    float nearplane = -0.2f;  // Posição do "near plane"
+    float farplane  = -40.0f; // Posição do "far plane"
+    glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    float field_of_view = 3.141592 / 3.0f;
+    glm::mat4 projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
 
-    //braço direito
-    PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(-0.06875f*ALPHA, 0.0f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para o braço direito
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do braço direito
-                  * Matrix_Rotate_Z(g_RightArmAngleZ)  // TERCEIRO rotação Z de Euler
-                  * Matrix_Rotate_Y(g_RightArmAngleY)  // SEGUNDO rotação Y de Euler
-                  * Matrix_Rotate_X(g_RightArmAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Scale(0.025f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do braço direito
-                glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### BRAÇO DIREITO // Desenhamos o braço direito
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Translate(0.0f*ALPHA, -0.08125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação do antebraço direito
-                model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do antebraço direito
-                      * Matrix_Rotate_Z(g_RightForearmAngleZ)  // TERCEIRO rotação Z de Euler
-                      * Matrix_Rotate_Y(g_RightForearmAngleY)  // SEGUNDO rotação Y de Euler
-                      * Matrix_Rotate_X(g_RightForearmAngleX); // PRIMEIRO rotação X de Euler
-                PushMatrix(model); // Guardamos matriz model atual na pilha
-                    model = model * Matrix_Scale(0.025f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do antebraço direito
-                    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                    glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### ANTEBRAÇO DIREITO // Desenhamos o antebraço direito
-                    PushMatrix(model);
-                        model = model * Matrix_Translate(0.0f, -1.06f, 0.0f);
-                        model = model * Matrix_Scale(1.0f, 0.15f, 1.0f);
-                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                        glUniform1i(object_id_uniform, CUBE);
-                        DrawVirtualObject("cube"); // #### MÃO DIREITA // Desenhamos a mão direita
-                    PopMatrix(model);
-                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-    PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
+    current_used_shader.setMatrix4("view",view);
+    current_used_shader.setMatrix4("projection",projection);
 
-    //braço esquerdo
-    PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(0.06875f*ALPHA, 0.0f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplica�ão à direita) com uma translação para o braço esquerdo
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do braço esquerdo
-                  * Matrix_Rotate_Z(g_LeftArmAngleZ)  // TERCEIRO rotação Z de Euler
-                  * Matrix_Rotate_Y(g_LeftArmAngleY)  // SEGUNDO rotação Y de Euler
-                  * Matrix_Rotate_X(g_LeftArmAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Scale(0.025f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do braço esquerdo
-                glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### BRAÇO ESQUERDO // Desenhamos o braço esquerdo
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Translate(0.0f*ALPHA, -0.08125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação do antebraço esquerdo
-                model = model // Atualizamos matriz model (multiplicação à direita) com a rotação do antebraço esquerdo
-                      * Matrix_Rotate_Z(g_LeftForearmAngleZ)  // TERCEIRO rotação Z de Euler
-                      * Matrix_Rotate_Y(g_LeftForearmAngleY)  // SEGUNDO rotação Y de Euler
-                      * Matrix_Rotate_X(g_LeftForearmAngleX); // PRIMEIRO rotação X de Euler
-                PushMatrix(model); // Guardamos matriz model atual na pilha
-                    model = model * Matrix_Scale(0.025f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento do antebraço esquerdo
-                    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                    glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### ANTEBRAÇO ESQUERDO // Desenhamos o antebraço esquerdo
-                    PushMatrix(model);
-                        model = model * Matrix_Translate(0.0f, -1.06f, 0.0f);
-                        model = model * Matrix_Scale(1.0f, 0.15f, 1.0f);
-                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                        glUniform1i(object_id_uniform, CUBE);
-                        DrawVirtualObject("cube"); // #### MÃO ESQUERDA // Desenhamos a mão esquerda
-                    PopMatrix(model);
-                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-    PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-
-    //coxa direita
-    PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(-0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para coxa direita
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação da coxa direita
-                  * Matrix_Rotate_Z(g_RightThighAngleZ)  // TERCEIRO rotação Z de Euler
-                  * Matrix_Rotate_Y(g_RightThighAngleY)  // SEGUNDO rotação Y de Euler
-                  * Matrix_Rotate_X(g_RightThighAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos a matriz model atual na pilha
-                model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da coxa direita
-                glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### COXA DIREITA // Desenhamos a coxa direita
-            PopMatrix(model);
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação da perna direita
-                PushMatrix(model); // Guardamos matriz model atual na pilha
-                    model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da perna direita
-                    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                    glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### PERNA DIREITA // Desenhamos a perna direita
-                    PushMatrix(model);
-                        model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
-                        model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
-                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                        glUniform1i(object_id_uniform, CUBE);
-                        DrawVirtualObject("cube"); // #### PÉ DIREITO // Desenhamos o pé direito
-                    PopMatrix(model);
-                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PopMatrix(model);
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-    PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-
-    //coxa esquerda
-    PushMatrix(model); // Guardamos matriz model atual na pilha
-        model = model * Matrix_Translate(0.02625f*ALPHA, -0.13125f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com uma translação para a coxa esquerda
-        PushMatrix(model); // Guardamos matriz model atual na pilha
-            model = model // Atualizamos matriz model (multiplicação à direita) com a rotação da coxa esquerda
-                  * Matrix_Rotate_Z(g_LeftThighAngleZ)  // TERCEIRO rotação Z de Euler
-                  * Matrix_Rotate_Y(g_LeftThighAngleY)  // SEGUNDO rotação Y de Euler
-                  * Matrix_Rotate_X(g_LeftThighAngleX); // PRIMEIRO rotação X de Euler
-            PushMatrix(model); // Guardamos a matriz model atual na pilha
-                model = model * Matrix_Scale(0.0375f*ALPHA, 0.08125f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da coxa esquerda
-                glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                glUniform1i(object_id_uniform, CUBE);
-                DrawVirtualObject("cube"); // #### COXA ESQUERDA // Desenhamos a coxa esquerda
-            PopMatrix(model);
-            PushMatrix(model); // Guardamos matriz model atual na pilha
-                model = model * Matrix_Translate(0.0f*ALPHA, -0.0875f*ALPHA, 0.0f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com a translação da perna esquerda
-                PushMatrix(model); // Guardamos matriz model atual na pilha
-                    model = model * Matrix_Scale(0.03125f*ALPHA, 0.075f*ALPHA, 0.025f*ALPHA); // Atualizamos matriz model (multiplicação à direita) com um escalamento da perna esquerda
-                    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                    glUniform1i(object_id_uniform, CUBE);
-                    DrawVirtualObject("cube"); // #### PERNA ESQUERDA // Desenhamos a perna direita
-                    PushMatrix(model);
-                        model = model * Matrix_Translate(0.0f, -1.06f, 0.4f);
-                        model = model * Matrix_Scale(0.85f, 0.2f, 2.0f);
-                        glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model)); // Enviamos matriz model atual para a GPU
-                        glUniform1i(object_id_uniform, CUBE);
-                        DrawVirtualObject("cube"); // #### PÉ ESQUERDO // Desenhamos o pé direito
-                    PopMatrix(model);
-                PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-            PopMatrix(model);
-        PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-    PopMatrix(model); // Tiramos da pilha a matriz model guardada anteriormente
-}
-
-// Função que anima a movimentação do jogador
-void AnimatePlayerMovement()
-{
-    float delta_arm = 3.141592 * 1.5;
-    float max_arm_angle = 1.0f;
-    float delta_thigh = 3.141592 * 0.75;
-    float max_thigh_angle = 0.5f;
-
-    if (g_PlayerIsMoving && !g_PlayerIsShooting)
+    if (theobject.name == "cube")
     {
-        time_now = glfwGetTime();
-        delta_time = time_now - time_prev;
-        time_prev = time_now;
-
-        g_RightArmAngleX += delta_arm * delta_time * right_arm_movement_animation_direction;
-        g_LeftArmAngleX += delta_arm * delta_time * left_arm_movement_animation_direction;
-
-        g_RightThighAngleX += delta_thigh * delta_time * right_thigh_movement_animation_direction;
-        g_LeftThighAngleX += delta_thigh * delta_time * left_thigh_movement_animation_direction;
-
-        if (g_RightArmAngleX > max_arm_angle)
-        {
-            g_RightArmAngleX = max_arm_angle;
-            right_arm_movement_animation_direction = -1;
-        }
-        else if (g_RightArmAngleX < -max_arm_angle)
-        {
-            g_RightArmAngleX = -max_arm_angle;
-            right_arm_movement_animation_direction = 1;
-        }
-
-        if (g_LeftArmAngleX > max_arm_angle)
-        {
-            g_LeftArmAngleX = max_arm_angle;
-            left_arm_movement_animation_direction = -1;
-        }
-        else if (g_LeftArmAngleX < -max_arm_angle)
-        {
-            g_LeftArmAngleX = -max_arm_angle;
-            left_arm_movement_animation_direction = 1;
-        }
-
-        if (g_RightThighAngleX > max_thigh_angle)
-        {
-            g_RightThighAngleX = max_thigh_angle;
-            right_thigh_movement_animation_direction = -1;
-        }
-        else if (g_RightThighAngleX < -max_thigh_angle)
-        {
-            g_RightThighAngleX = -max_thigh_angle;
-            right_thigh_movement_animation_direction = 1;
-        }
-
-        if (g_LeftThighAngleX > max_thigh_angle)
-        {
-            g_LeftThighAngleX = max_thigh_angle;
-            left_thigh_movement_animation_direction = -1;
-        }
-        else if (g_LeftThighAngleX < -max_thigh_angle)
-        {
-            g_LeftThighAngleX = -max_thigh_angle;
-            left_thigh_movement_animation_direction = 1;
-        }
+        //theobject.id = CUBE;
     }
-    else if (!g_PlayerIsShooting)
+    if (theobject.name == "basketball_court") // court
     {
-        g_RightArmAngleX = 0.0f;
-        g_LeftArmAngleX = 0.0f;
-        g_RightThighAngleX = 0.0f;
-        g_LeftThighAngleX = 0.0f;
+        //theobject.id = COURT;
     }
-}
-
-// Função que anima o pulo do jogador
-void AnimatePlayerJump()
-{
-    /*
-    float delta_jump = 0.01;
-    float max_jump_height = 1.0f;
-
-    if (g_PlayerIsJumping)
+    else if (theobject.name == "sphere") // bola
     {
-        time_now = glfwGetTime();
-        delta_time = time_now - time_prev;
-        time_prev = time_now;
-
-        camera_position_c.y += delta_jump * jump_direction;
-
-        if (camera_position_c.y > max_jump_height)
-        {
-            camera_position_c.y = max_jump_height;
-            jump_direction = -1;
-        }
-        else if (camera_position_c.y < 0.422)
-        {
-            camera_position_c.y = 0.422;
-            jump_direction = 1;
-            g_PlayerIsJumping = false;
-        }
+        //theobject.id = SPHERE;
     }
-    */
-}
-
-// Função que anima o arremesso do jogador
-void AnimatePlayerShot()
-{
-    float delta_arm = 5.0f;//1.0f
-    float max_arm_angle = -1.7f;
-
-    float delta_forearm = 5.0f;//1.0f
-    float max_right_forearm_angle_x = -0.8f;
-    float max_right_forearm_angle_z = 0.8f;//0.1f
-    float max_left_forearm_angle_x = -0.8f;
-    float max_left_forearm_angle_z = -0.5f;
-    float max_right_forearm_angle_shot = 0.0f;
-
-    if (g_PlayerIsShooting)
+    else if (theobject.name == "backboard_glass") // vidro
     {
-        time_now = glfwGetTime();
-        delta_time = time_now - time_prev;
-        time_prev = time_now;
-
-        switch(player_shooting_animation_part)
-        {
-            case 1:
-                if (g_RightForearmAngleX > max_right_forearm_angle_x)
-                    g_RightForearmAngleX -= delta_time * delta_forearm;
-                if (g_RightForearmAngleZ < max_right_forearm_angle_z)
-                    g_RightForearmAngleZ += delta_time * delta_forearm;
-                if (g_LeftForearmAngleX > max_left_forearm_angle_x)
-                    g_LeftForearmAngleX -= delta_time * delta_forearm;
-                if (g_LeftForearmAngleZ > max_left_forearm_angle_z)
-                    g_LeftForearmAngleZ -= delta_time * delta_forearm;
-
-                if (g_RightForearmAngleX <= max_right_forearm_angle_x &&
-                    g_RightForearmAngleZ >= max_right_forearm_angle_z &&
-                    g_LeftForearmAngleX  <= max_left_forearm_angle_x  &&
-                    g_LeftForearmAngleZ  <= max_left_forearm_angle_z)
-                {
-                    g_RightForearmAngleX = max_right_forearm_angle_x;
-                    g_RightForearmAngleZ = max_right_forearm_angle_z;
-                    g_LeftForearmAngleX  = max_left_forearm_angle_x;
-                    g_LeftForearmAngleZ  = max_left_forearm_angle_z;
-
-                    player_shooting_animation_part += 1;
-                }
-                break;
-
-            case 2:
-                g_RightArmAngleX -= delta_time * delta_arm;
-                g_LeftArmAngleX  -= delta_time * delta_arm;
-
-                if (g_RightArmAngleX <= max_arm_angle)
-                {
-                    g_RightArmAngleX = max_arm_angle;
-                    //g_LeftArmAngleX = max_arm_angle;
-
-                    player_shooting_animation_part += 1;
-
-                    g_BallWasShot = true;
-                    ball_time_prev = glfwGetTime();
-                    ball_t = 0.0f;
-                    p1.x = p2.x = p3.x = p4.x = ball_position_c.x;
-                    p1.y = ball_position_c.y;
-                    p2.y = ball_position_c.y+4.0f;
-                    p3.y = ball_position_c.y+4.0f;
-                    p4.y = 0.0f;
-                    p1.z = ball_position_c.z;
-                    p2.z = ball_position_c.z+2.4f;
-                    p3.z = ball_position_c.z+4.8f;
-                    p4.z = ball_position_c.z+7.2f;
-                }
-                break;
-
-            case 3:
-                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
-                g_RightArmAngleX -= delta_time * delta_arm;
-                g_RightForearmAngleX += delta_time * delta_forearm;
-                g_RightForearmAngleZ -= delta_time * delta_forearm;
-                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
-
-                if (g_RightForearmAngleZ <=  max_right_forearm_angle_shot)
-                {
-                    g_RightForearmAngleX = max_right_forearm_angle_shot;
-                    g_RightForearmAngleZ = max_right_forearm_angle_shot;
-
-                    player_shooting_animation_part += 1;
-                }
-                break;
-
-            case 4:
-                g_RightArmAngleX += delta_time * delta_arm/5;
-                g_LeftArmAngleX += delta_time * delta_arm/5;
-
-                if (g_LeftArmAngleX > 0.0f)
-                {
-                    g_RightArmAngleX = 0.0f;
-                    g_LeftArmAngleX = 0.0f;
-                    g_RightForearmAngleX = 0.0f;
-                    g_RightForearmAngleZ = 0.0f;
-                    g_LeftForearmAngleX = 0.0f;
-                    g_LeftForearmAngleZ = 0.0f;
-
-                    g_PlayerIsShooting = false;
-                    player_shooting_animation_part = 1;
-                }
-                break;
-        }
+        //theobject.id = GLASS;
     }
-}
-
-// Função que desenha a bola de basquete quando ela é arremessada
-void DrawBall()
-{
-    glm::mat4 model = Matrix_Identity();
-
-    if (g_BallWasShot)
+    else if (theobject.name == "basketball_backboard") // tabela
     {
-        //printf("%f\n", ball_t);
-        ball_time_now = glfwGetTime();
-        ball_delta_time = ball_time_now - ball_time_prev;
-
-        // Verifica o c(t) atual
-        glm::vec4 c = powf(1-ball_t,3)*p1 +
-                      3*ball_t*powf(1-ball_t,2)*p2 +
-                      3*ball_t*ball_t*(1-ball_t)*p3 +
-                      powf(ball_t,3)*p4;
-        ball_t += 0.7*ball_delta_time;
-
-        model = Matrix_Translate(c.x,c.y,c.z) * Matrix_Scale(0.25f, 0.25f, 0.25f);
-
-        if (ball_t >= 1.0f)
-        {
-            g_BallWasShot = false;
-            ball_t = 0.0f;
-        }
-
-        ball_time_prev = ball_time_now;
-    }
-    else
-    {
-        model = Matrix_Translate(ball_position_c.x,ball_position_c.y,ball_position_c.z) * Matrix_Scale(0.25f, 0.25f, 0.25f);
+        //theobject.id = BACKBOARD;
     }
 
-    glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-    glUniform1i(object_id_uniform, SPHERE);
-    DrawVirtualObject("sphere");
+    current_used_shader.setMatrix4("model",model);
+    current_used_shader.setInt("object_id",object_id);
+
+    current_used_shader.setFloat4("bbox_min", glm::vec4(theobject.bbox_min,1.0f));
+    current_used_shader.setFloat4("bbox_max", glm::vec4(theobject.bbox_max,1.0f));
+
+    current_used_shader.setInt("TextureImage0",0);
+    current_used_shader.setInt("TextureImage1",1);
+    current_used_shader.setInt("TextureImage2",2);
+
+    DrawVirtualObject(theobject.name.c_str());
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
@@ -1196,13 +496,6 @@ void DrawVirtualObject(const char* object_name)
     // comentários detalhados dentro da definição de BuildTrianglesAndAddToVirtualScene().
     glBindVertexArray(g_VirtualScene[object_name].vertex_array_object_id);
 
-    // Setamos as variáveis "bbox_min" e "bbox_max" do fragment shader
-    // com os parâmetros da axis-aligned bounding box (AABB) do modelo.
-    glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min;
-    glm::vec3 bbox_max = g_VirtualScene[object_name].bbox_max;
-    glUniform4f(bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f);
-    glUniform4f(bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
-
     // Pedimos para a GPU rasterizar os vértices dos eixos XYZ
     // apontados pelo VAO como linhas. Veja a definição de
     // g_VirtualScene[""] dentro da função BuildTrianglesAndAddToVirtualScene(), e veja
@@ -1264,29 +557,10 @@ void LoadShadersFromFiles()
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(program_id);
-    glUniform1i(glGetUniformLocation(program_id, "TextureCourt"), 0);
-    glUniform1i(glGetUniformLocation(program_id, "TextureBall"), 1);
+    glUniform1i(glGetUniformLocation(program_id, "TextureImage0"),0);
+    glUniform1i(glGetUniformLocation(program_id, "TextureImage1"), 1);
+    glUniform1i(glGetUniformLocation(program_id, "TextureImage2"), 2);
     glUseProgram(0);
-}
-
-// Função que pega a matriz M e guarda a mesma no topo da pilha
-void PushMatrix(glm::mat4 M)
-{
-    g_MatrixStack.push(M);
-}
-
-// Função que remove a matriz atualmente no topo da pilha e armazena a mesma na variável M
-void PopMatrix(glm::mat4& M)
-{
-    if ( g_MatrixStack.empty() )
-    {
-        M = Matrix_Identity();
-    }
-    else
-    {
-        M = g_MatrixStack.top();
-        g_MatrixStack.pop();
-    }
 }
 
 // Função que computa as normais de um ObjModel, caso elas não tenham sido
@@ -1441,7 +715,10 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
 
+        theobject.sh_hoff = sh_hoff;
+
         g_VirtualScene[model->shapes[shape].name] = theobject;
+
     }
 
     GLuint VBO_model_coefficients_id;
@@ -1868,18 +1145,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         //g_PlayerIsJumping = true;
     }
 
-    // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
-    if (key == GLFW_KEY_P && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = true;
-    }
-
-    // Se o usuário apertar a tecla O, utilizamos projeção ortográfica.
-    if (key == GLFW_KEY_O && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = false;
-    }
-
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
@@ -1897,12 +1162,13 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla W,
     if (key == GLFW_KEY_W)
     {
-        time_prev = glfwGetTime();
+        player_time_prev = glfwGetTime();
 
         //verificamos se ele pressionou, se sim, coloca W (índice 0 do array camera_movement_keys) como true
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[0] = 1;
+            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca W como false
         else if (action == GLFW_RELEASE)
@@ -1914,28 +1180,31 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla S,
     if (key == GLFW_KEY_S)
     {
-        time_prev = glfwGetTime();
+        player_time_prev = glfwGetTime();
 
         //verificamos se ele pressionou, se sim, coloca S (índice 1 do array camera_movement_keys) como true
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[1] = 1;
+            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca S como false
         else if (action == GLFW_RELEASE)
         {
             camera_movement_keys[1] = 0;
+            g_PlayerIsMoving = false;
         }
     }
     // Se o usuário apertar a tecla D,
     if (key == GLFW_KEY_D)
     {
-        time_prev = glfwGetTime();
+        player_time_prev = glfwGetTime();
 
         //verificamos se ele pressionou, se sim, coloca D (índice 2 do array camera_movement_keys) como true
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[2] = 1;
+            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca D como false
         else if (action == GLFW_RELEASE)
@@ -1947,12 +1216,13 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla A,
     if (key == GLFW_KEY_A)
     {
-        time_prev = glfwGetTime();
+        player_time_prev = glfwGetTime();
 
         //verificamos se ele pressionou, se sim, coloca A (índice 3 do array camera_movement_keys) como true
         if (action == GLFW_PRESS)
         {
             camera_movement_keys[3] = 1;
+            g_PlayerIsMoving = true;
         }
         //se ele soltou, coloca A como false
         else if (action == GLFW_RELEASE)
@@ -1973,7 +1243,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla f, arremessa a bola.
     if (key == GLFW_KEY_F && action == GLFW_PRESS && !g_PlayerIsShooting)
     {
-        time_prev = glfwGetTime();
+        player_time_prev = glfwGetTime();
         g_PlayerIsShooting = true;
     }
 }
@@ -1982,134 +1252,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 void ErrorCallback(int error, const char* description)
 {
     fprintf(stderr, "ERROR: GLFW: %s\n", description);
-}
-
-// Esta função recebe um vértice com coordenadas de modelo p_model e passa o
-// mesmo por todos os sistemas de coordenadas armazenados nas matrizes model,
-// view, e projection; e escreve na tela as matrizes e pontos resultantes
-// dessas transformações.
-void TextRendering_ShowModelViewProjection(
-    GLFWwindow* window,
-    glm::mat4 projection,
-    glm::mat4 view,
-    glm::mat4 model,
-    glm::vec4 p_model
-)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    glm::vec4 p_world = model*p_model;
-    glm::vec4 p_camera = view*p_world;
-    glm::vec4 p_clip = projection*p_camera;
-    glm::vec4 p_ndc = p_clip / p_clip.w;
-
-    float pad = TextRendering_LineHeight(window);
-
-    TextRendering_PrintString(window, " Model matrix             Model     In World Coords.", -1.0f, 1.0f-pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, model, p_model, -1.0f, 1.0f-2*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-6*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-7*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-8*pad, 1.0f);
-
-    TextRendering_PrintString(window, " View matrix              World     In Camera Coords.", -1.0f, 1.0f-9*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, view, p_world, -1.0f, 1.0f-10*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-14*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-15*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-16*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Projection matrix        Camera                    In NDC", -1.0f, 1.0f-17*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductDivW(window, projection, p_camera, -1.0f, 1.0f-18*pad, 1.0f);
-
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    glm::vec2 a = glm::vec2(-1, -1);
-    glm::vec2 b = glm::vec2(+1, +1);
-    glm::vec2 p = glm::vec2( 0,  0);
-    glm::vec2 q = glm::vec2(width, height);
-
-    glm::mat4 viewport_mapping = Matrix(
-        (q.x - p.x)/(b.x-a.x), 0.0f, 0.0f, (b.x*p.x - a.x*q.x)/(b.x-a.x),
-        0.0f, (q.y - p.y)/(b.y-a.y), 0.0f, (b.y*p.y - a.y*q.y)/(b.y-a.y),
-        0.0f , 0.0f , 1.0f , 0.0f ,
-        0.0f , 0.0f , 0.0f , 1.0f
-    );
-
-    TextRendering_PrintString(window, "                                                       |  ", -1.0f, 1.0f-22*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .--------------------------'  ", -1.0f, 1.0f-23*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V                           ", -1.0f, 1.0f-24*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Viewport matrix           NDC      In Pixel Coords.", -1.0f, 1.0f-25*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductMoreDigits(window, viewport_mapping, p_ndc, -1.0f, 1.0f-26*pad, 1.0f);
-}
-
-// Escrevemos na tela os ângulos de Euler definidos nas variáveis globais
-// g_AngleX, g_AngleY, e g_AngleZ.
-void TextRendering_ShowEulerAngles(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float pad = TextRendering_LineHeight(window);
-
-    char buffer[80];
-    snprintf(buffer, 80, "Euler Angles rotation matrix = Z(%.2f)*Y(%.2f)*X(%.2f)\n", g_AngleZ, g_AngleY, g_AngleX);
-
-    TextRendering_PrintString(window, buffer, -1.0f+pad/10, -1.0f+2*pad/10, 1.0f);
-}
-
-// Escrevemos na tela qual matriz de projeção está sendo utilizada.
-void TextRendering_ShowProjection(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float lineheight = TextRendering_LineHeight(window);
-    float charwidth = TextRendering_CharWidth(window);
-
-    if ( g_UsePerspectiveProjection )
-        TextRendering_PrintString(window, "Perspective", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
-    else
-        TextRendering_PrintString(window, "Orthographic", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
-}
-
-// Escrevemos na tela o número de quadros renderizados por segundo (frames per
-// second).
-void TextRendering_ShowFramesPerSecond(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    // Variáveis estáticas (static) mantém seus valores entre chamadas
-    // subsequentes da função!
-    static float old_seconds = (float)glfwGetTime();
-    static int   ellapsed_frames = 0;
-    static char  buffer[20] = "?? fps";
-    static int   numchars = 7;
-
-    ellapsed_frames += 1;
-
-    // Recuperamos o número de segundos que passou desde a execução do programa
-    float seconds = (float)glfwGetTime();
-
-    // Número de segundos desde o último cálculo do fps
-    float ellapsed_seconds = seconds - old_seconds;
-
-    if ( ellapsed_seconds > 1.0f )
-    {
-        numchars = snprintf(buffer, 20, "%.2f fps", ellapsed_frames / ellapsed_seconds);
-
-        old_seconds = seconds;
-        ellapsed_frames = 0;
-    }
-
-    float lineheight = TextRendering_LineHeight(window);
-    float charwidth = TextRendering_CharWidth(window);
-
-    TextRendering_PrintString(window, buffer, 1.0f-(numchars + 1)*charwidth, 1.0f-lineheight, 1.0f);
 }
 
 // Função para debugging: imprime no terminal todas informações de um modelo
