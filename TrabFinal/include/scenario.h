@@ -34,12 +34,9 @@
 glm::mat4 TransformCourt();
 
 // Função que desenha as tabelas na quadra
-std::vector<glm::mat4> TransformBackboard();
+std::vector<glm::mat4> TransformHoop();
 
 // Função que desenha o plano de fundo do cenário
-void DrawBackground();
-
-// Função que desenha os vidros das tabelas na quadra
-std::vector<glm::mat4> TransformGlass();
+glm::mat4 TransformSkybox();
 
 #endif // _SCENARIO_H

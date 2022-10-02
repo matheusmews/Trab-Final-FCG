@@ -102,6 +102,11 @@ public:
         glUniform4f(glGetUniformLocation(ID, name.c_str()), value[0], value[1], value[2], value[3]);
     }
     // ------------------------------------------------------------------------
+    void setFloat2(const std::string& name, glm::vec2 value) const
+    {
+        glUniform2f(glGetUniformLocation(ID, name.c_str()), value[0], value[1]);
+    }
+    // ------------------------------------------------------------------------
     void setMatrix4(const std::string& name, glm::mat4 m)
     {
         glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(m));

@@ -62,7 +62,7 @@ glm::mat4 Matrix_Camera_View(glm::vec4 position_c, glm::vec4 view_vector, glm::v
 glm::mat4 Matrix_Orthographic(float l, float r, float b, float t, float n, float f);
 
 // Matriz de projeção perspectiva
-glm::mat4 Matrix_Perspective(float field_of_view, float aspect, float n, float f);
+glm::mat4 Matrix_Perspective(float field_of_view, float aspect, float n, float f, bool ortho);
 
 // Função que imprime uma matriz M no terminal
 void PrintMatrix(glm::mat4 M);

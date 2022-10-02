@@ -258,7 +258,7 @@ glm::mat4 Matrix_Orthographic(float l, float r, float b, float t, float n, float
 }
 
 // Matriz de projeção perspectiva
-glm::mat4 Matrix_Perspective(float field_of_view, float aspect, float n, float f)
+glm::mat4 Matrix_Perspective(float field_of_view, float aspect, float n, float f, bool ortho)
 {
     float t = fabs(n) * tanf(field_of_view / 2.0f);
     float b = -t;
@@ -274,6 +274,8 @@ glm::mat4 Matrix_Perspective(float field_of_view, float aspect, float n, float f
 
     // A matriz M é a mesma computada acima em Matrix_Orthographic().
     glm::mat4 M = Matrix_Orthographic(l, r, b, t, n, f);
+    if (ortho)
+        return M;
 
     // Note que as matrizes M*P e -M*P fazem exatamente a mesma projeção
     // perspectiva, já que o sinal de negativo não irá afetar o resultado

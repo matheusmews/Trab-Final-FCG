@@ -29,6 +29,8 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
+#include "camera.h"
+#include "player.h"
 
 // Variáveis externas
 extern glm::vec4 ball_position_c;
@@ -42,6 +44,13 @@ extern glm::vec4 p3;
 extern glm::vec4 p4;
 
 extern bool g_BallWasShot;
+extern bool g_MeasuringStrength;
+
+extern GLfloat measure_time_prev;
+extern GLfloat measure_time_now;
+extern GLfloat measure_delta_time;
+
+void MeasureShotStrength();
 
 // Função que desenha a bola de basquete quando ela é arremessada
 glm::mat4 TransformBall();

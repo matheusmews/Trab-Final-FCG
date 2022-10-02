@@ -34,6 +34,7 @@
 
 // Variáveis externas
 extern GLfloat player_time_prev;
+extern GLfloat player_jump_time_prev;
 
 extern float g_TorsoPositionX;
 extern float g_TorsoPositionY;
@@ -68,8 +69,13 @@ extern float g_LeftThighAngleY;
 extern float g_LeftThighAngleZ;
 
 extern bool g_PlayerIsMoving;
+extern bool g_PlayerStartedShot;
 extern bool g_PlayerIsShooting;
 extern bool g_PlayerIsJumping;
+
+// Matriz que guarda as transformações que chegam na mão direita do player,
+// para fazer a animação de arremesso
+extern glm::mat4 right_hand_model;
 
 // Função que pega a matriz M e guarda a mesma no topo da pilha
 void PushMatrix(glm::mat4 M);
@@ -87,6 +93,9 @@ void AnimatePlayerJump();
 
 // Função que anima o arremesso do jogador
 void AnimatePlayerShot();
+
+// Função que controla todas as animaçõe do player
+void AnimatePlayer();
 
 #endif // _PLAYER_H
 

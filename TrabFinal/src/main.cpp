@@ -99,7 +99,6 @@ struct SceneObject
 
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
-void LoadShadersFromFiles(); // Carrega os shaders de vértice e fragmento, criando um programa de GPU
 void LoadTextureImage(const char* filename); // Função que carrega imagens de textura
 void DrawVirtualObject(const char* object_name); // Desenha um objeto armazenado em g_VirtualScene
 GLuint LoadShader_Vertex(const char* filename);   // Carrega um vertex shader
@@ -117,7 +116,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-void RenderObject(std::string object_name, glm::mat4 model, int object_id);
+void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool ortho);
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -154,6 +153,7 @@ GLint bbox_max_uniform;
 
 // SHADEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEER
 Shader sh_hoff;
+Shader sh_para_o_power_bar;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -163,10 +163,15 @@ GLuint g_NumLoadedTextures = 0;
 #define PLANE      2
 #define COURT      3
 #define BACKBOARD  4
-#define BACKGROUND 5
+#define SKYBOX     5
 #define GLASS      6
 #define CUBE       7
 #define HAND       8
+#define HOOP       9
+#define POWERBAR  10
+
+// Função que renderiza a interface do usuário
+void RenderUI();
 
 int main(int argc, char* argv[])
 {
@@ -239,11 +244,13 @@ int main(int argc, char* argv[])
     // para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
     // LoadShadersFromFiles();
     sh_hoff = Shader("../../src/shader_vertex.glsl","../../src/shader_fragment.glsl");
+    sh_para_o_power_bar = Shader("../../src/shader_vertex_power_bar.glsl","../../src/shader_fragment_power_bar.glsl");
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImage0
-    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImage1
-    LoadTextureImage("../../data/textures/court/stadium_background.png");  // TextureImage2
+    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImageCourt
+    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImageBall
+    LoadTextureImage("../../data/textures/skybox/warriors_skybox.png");  // TextureImageSkybox
+    LoadTextureImage("../../data/textures/hoop/hoop.png");             // TextureImageHoop
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/objects/sphere.obj");
@@ -274,9 +281,19 @@ int main(int argc, char* argv[])
     ComputeNormals(&glassmodel);
     BuildTrianglesAndAddToVirtualScene(&glassmodel);
 
-    ObjModel background("../../data/objects/background.obj");
-    ComputeNormals(&background);
-    BuildTrianglesAndAddToVirtualScene(&background);
+    ObjModel skybox("../../data/objects/skybox.obj");
+    ComputeNormals(&skybox);
+    BuildTrianglesAndAddToVirtualScene(&skybox);
+
+    ObjModel hoop("../../data/objects/hoop.obj");
+    ComputeNormals(&hoop);
+    BuildTrianglesAndAddToVirtualScene(&hoop);
+
+    // TESTE POWER BAR =====================
+    ObjModel powerbar("../../data/objects/powerbar.obj");
+    ComputeNormals(&powerbar);
+    BuildTrianglesAndAddToVirtualScene(&powerbar);
+    // =====================================
 
     if ( argc > 1 )
     {
@@ -291,9 +308,9 @@ int main(int argc, char* argv[])
     glEnable(GL_DEPTH_TEST);
 
     // Habilitamos o Backface Culling. Veja slides 23-34 do documento Aula_13_Clipping_and_Culling.pdf.
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
+    //glEnable(GL_CULL_FACE);
+    //glCullFace(GL_BACK);
+    //glFrontFace(GL_CCW);
 
     camera_time_prev = glfwGetTime();
 
@@ -318,25 +335,32 @@ int main(int argc, char* argv[])
 
         // DESENHOS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         glm::mat4 model = Matrix_Identity();
+
+        // Desenhamos o modelo do skybox
+        model = TransformSkybox();
+        RenderObject("skybox",model,SKYBOX,false);
+
         // Desenhamos o modelo do chão da quadra
         model = TransformCourt();
-        RenderObject("basketball_court",model,COURT);
-        // Desenhamos o modelo do plano de fundo do cenário
-        //TransformBackground();
-        //RenderObject("basketball_background",model,BACKGROUND);
-        // Desenhamos o modelo das tabelas de basquete
-        for (auto cur_model : TransformBackboard())
-            RenderObject("basketball_backboard",cur_model,BACKBOARD);
+        RenderObject("basketball_court",model,COURT,false);
+
         // Desenhamos o modelo da bola de basquete
         model = TransformBall();
-        RenderObject("sphere",model,SPHERE);
-        // Desenhamos o modelo do vidro de uma tabela de basquete
-        for (auto cur_model : TransformGlass())
-            RenderObject("backboard_glass",cur_model,GLASS);
+        RenderObject("sphere",model,SPHERE,false);
+
         // Desenhamos o modelo do jogador
-        AnimatePlayerMovement(); AnimatePlayerJump(); AnimatePlayerShot();
+        AnimatePlayer();
         for (auto cur_model : TransformPlayer())
-            RenderObject("cube",cur_model,CUBE);
+            RenderObject("cube",cur_model,CUBE,false);
+
+        // Desenhamos o modelo das tabelas de basquete
+        for (auto cur_model : TransformHoop())
+            RenderObject("hoop",cur_model,HOOP,false);
+
+        // TESTE POWER BAR =============================================================
+        glm::vec4 teste = camera_view_vector+camera_position_c;
+        model = TransformHoop()[0];
+        RenderObject("powerbar",model,POWERBAR,true);
 
 
         // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
@@ -368,7 +392,7 @@ int main(int argc, char* argv[])
 }
 
 // FUNÇÃO FODA
-void RenderObject(std::string object_name, glm::mat4 model, int object_id)
+void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool ortho)
 {
     /* funcao chamada pra todo objeto que quero rendenizar no frame
     tem que usar o shader
@@ -394,9 +418,17 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id)
     // efetivamente aplicadas em todos os pontos.
     float nearplane = -0.2f;  // Posição do "near plane"
     float farplane  = -40.0f; // Posição do "far plane"
+
     glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+
+    if (ortho)
+    {
+        nearplane = -10.0f;
+        view = Matrix_Camera_View(glm::vec4(0.0,0.0,10.0,1.0),glm::vec4(0.0,0.0,-1.0,0.0), glm::vec4(0.0,1.0,0.0,0.0));
+    }
+
     float field_of_view = 3.141592 / 3.0f;
-    glm::mat4 projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
+    glm::mat4 projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane,ortho);
 
     current_used_shader.setMatrix4("view",view);
     current_used_shader.setMatrix4("projection",projection);
@@ -421,6 +453,16 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id)
     {
         //theobject.id = BACKBOARD;
     }
+    else if (theobject.name == "skybox") // skybox
+    {
+        //theobject.id = SKYBOX;
+    }
+    else if (theobject.name == "powerbar")
+    {
+        current_used_shader.setFloat4("cameraPosition",camera_position_c);
+        current_used_shader.setFloat2("spriteSize", glm::vec2(0.2f,0.5f));
+        current_used_shader.setFloat2("barPosition",glm::vec2(0.0f,-1.0f));
+    }
 
     current_used_shader.setMatrix4("model",model);
     current_used_shader.setInt("object_id",object_id);
@@ -428,9 +470,10 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id)
     current_used_shader.setFloat4("bbox_min", glm::vec4(theobject.bbox_min,1.0f));
     current_used_shader.setFloat4("bbox_max", glm::vec4(theobject.bbox_max,1.0f));
 
-    current_used_shader.setInt("TextureImage0",0);
-    current_used_shader.setInt("TextureImage1",1);
-    current_used_shader.setInt("TextureImage2",2);
+    current_used_shader.setInt("TextureImageCourt",0);
+    current_used_shader.setInt("TextureImageBall",1);
+    current_used_shader.setInt("TextureImageSkybox",2);
+    current_used_shader.setInt("TextureImageHoop",3);
 
     DrawVirtualObject(theobject.name.c_str());
 }
@@ -511,56 +554,6 @@ void DrawVirtualObject(const char* object_name)
     // "Desligamos" o VAO, evitando assim que operações posteriores venham a
     // alterar o mesmo. Isso evita bugs.
     glBindVertexArray(0);
-}
-
-// Função que carrega os shaders de vértices e de fragmentos que serão
-// utilizados para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
-void LoadShadersFromFiles()
-{
-    // Note que o caminho para os arquivos "shader_vertex.glsl" e
-    // "shader_fragment.glsl" estão fixados, sendo que assumimos a existência
-    // da seguinte estrutura no sistema de arquivos:
-    //
-    //    + FCG_Lab_01/
-    //    |
-    //    +--+ bin/
-    //    |  |
-    //    |  +--+ Release/  (ou Debug/ ou Linux/)
-    //    |     |
-    //    |     o-- main.exe
-    //    |
-    //    +--+ src/
-    //       |
-    //       o-- shader_vertex.glsl
-    //       |
-    //       o-- shader_fragment.glsl
-    //
-    vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
-    fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
-
-    // Deletamos o programa de GPU anterior, caso ele exista.
-    if ( program_id != 0 )
-        glDeleteProgram(program_id);
-
-    // Criamos um programa de GPU utilizando os shaders carregados acima.
-    program_id = CreateGpuProgram(vertex_shader_id, fragment_shader_id);
-
-    // Buscamos o endereço das variáveis definidas dentro do Vertex Shader.
-    // Utilizaremos estas variáveis para enviar dados para a placa de vídeo
-    // (GPU)! Veja arquivo "shader_vertex.glsl" e "shader_fragment.glsl".
-    model_uniform           = glGetUniformLocation(program_id, "model"); // Variável da matriz "model"
-    view_uniform            = glGetUniformLocation(program_id, "view"); // Variável da matriz "view" em shader_vertex.glsl
-    projection_uniform      = glGetUniformLocation(program_id, "projection"); // Variável da matriz "projection" em shader_vertex.glsl
-    object_id_uniform       = glGetUniformLocation(program_id, "object_id"); // Variável "object_id" em shader_fragment.glsl
-    bbox_min_uniform        = glGetUniformLocation(program_id, "bbox_min");
-    bbox_max_uniform        = glGetUniformLocation(program_id, "bbox_max");
-
-    // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
-    glUseProgram(program_id);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage0"),0);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage1"), 1);
-    glUniform1i(glGetUniformLocation(program_id, "TextureImage2"), 2);
-    glUseProgram(0);
 }
 
 // Função que computa as normais de um ObjModel, caso elas não tenham sido
@@ -715,7 +708,10 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
 
-        theobject.sh_hoff = sh_hoff;
+        if (theobject.name != "powerbar")
+            theobject.sh_hoff = sh_hoff;
+        else
+            theobject.sh_hoff = sh_para_o_power_bar;
 
         g_VirtualScene[model->shapes[shape].name] = theobject;
 
@@ -1062,7 +1058,7 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 
     // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
     float phimax = 3.141592f/2;
-    float phimin = -phimax;
+    float phimin = -phimax+0.05f;
 
     if (g_CameraPhi > phimax)
         g_CameraPhi = phimax;
@@ -1142,21 +1138,14 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !g_PlayerIsJumping)
     {
-        //g_PlayerIsJumping = true;
+        g_PlayerIsJumping = true;
+        player_jump_time_prev = glfwGetTime();
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
-    }
-
-    // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
-    if (key == GLFW_KEY_R && action == GLFW_PRESS)
-    {
-        LoadShadersFromFiles();
-        fprintf(stdout,"Shaders recarregados!\n");
-        fflush(stdout);
     }
 
     // Se o usuário apertar a tecla W,
@@ -1241,10 +1230,26 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     }
 
     // Se o usuário apertar a tecla f, arremessa a bola.
-    if (key == GLFW_KEY_F && action == GLFW_PRESS && !g_PlayerIsShooting)
+    if (key == GLFW_KEY_F && (!g_PlayerIsShooting || g_MeasuringStrength))
     {
-        player_time_prev = glfwGetTime();
-        g_PlayerIsShooting = true;
+        if (action == GLFW_PRESS && !g_PlayerIsShooting && !g_MeasuringStrength)
+        {
+            measure_time_prev = glfwGetTime();
+            g_MeasuringStrength = true;
+            g_RightArmAngleX = 0.0f;
+            g_LeftArmAngleX = 0.0f;
+            g_RightThighAngleX = 0.0f;
+            g_LeftThighAngleX = 0.0f;
+            //g_PlayerStartedShot = true;
+            printf("press =====================\n");
+        }
+        else if (action == GLFW_RELEASE && g_MeasuringStrength)
+        {
+            player_time_prev = glfwGetTime();
+            g_PlayerIsShooting = true;
+            g_MeasuringStrength = false;
+            printf("release =====================\n");
+        }
     }
 }
 

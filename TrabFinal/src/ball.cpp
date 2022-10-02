@@ -25,13 +25,46 @@ glm::vec4 p4 = glm::vec4(0.0f,0.0f,0.0f,1.0f);
 
 // Flags que controlam a animação da bola
 bool g_BallWasShot = false;
+bool g_MeasuringStrength = false;
+
+GLfloat measure_time_prev;
+GLfloat measure_time_now;
+GLfloat measure_delta_time;
+
+void MeasureShotStrength()
+{
+    printf("medindo\n");
+    measure_time_now = glfwGetTime();
+    measure_delta_time = measure_time_now-measure_time_prev;
+
+    printf("%f\n", measure_delta_time);
+
+    if (measure_delta_time > 0.5f && !g_PlayerIsShooting)
+    {
+        player_time_prev = glfwGetTime();
+        g_PlayerIsShooting = true;
+        printf("player pode chutar\n");
+    }
+    else if (measure_delta_time > 2.5f && g_PlayerIsShooting)
+    {
+        g_MeasuringStrength = false;
+        printf("tah na hora de soltar\n");
+    }
+}
 
 // Função que desenha a bola de basquete quando ela é arremessada
 glm::mat4 TransformBall()
 {
     glm::mat4 model = Matrix_Identity();
 
-    if (g_BallWasShot)
+    if (g_PlayerIsShooting && !g_BallWasShot)
+    {
+        model = right_hand_model * Matrix_Scale(0.2f, 0.2f, 0.2f);
+        //0.015625
+        //0.02109375
+        //0.015625
+    }
+    else if (g_BallWasShot)
     {
         //printf("%f\n", ball_t);
         ball_time_now = glfwGetTime();
@@ -56,6 +89,10 @@ glm::mat4 TransformBall()
     }
     else
     {
+        ball_position_c.x = camera_position_c.x+camera_view_vector.x;
+        ball_position_c.y = camera_position_c.y+camera_view_vector.y - 0.02f;
+        ball_position_c.z = camera_position_c.z+camera_view_vector.z;
+
         model = Matrix_Translate(ball_position_c.x,ball_position_c.y,ball_position_c.z) * Matrix_Scale(0.2f, 0.2f, 0.2f);
     }
 

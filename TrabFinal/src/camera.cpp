@@ -89,13 +89,5 @@ void MoveFreeCamera()
         camera_position_c.y = 2.06f;
     }
 
-    g_TorsoPositionX = camera_position_c.x;
-    g_TorsoPositionY = camera_position_c.y - 0.2f;
-    g_TorsoPositionZ = camera_position_c.z;
-
-    ball_position_c.x = camera_position_c.x+camera_view_vector.x;
-    ball_position_c.y = camera_position_c.y+camera_view_vector.y - 0.4f;
-    ball_position_c.z = camera_position_c.z+camera_view_vector.z;
-
     camera_time_prev = camera_time_now;
 }
