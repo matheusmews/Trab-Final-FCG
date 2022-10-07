@@ -97,6 +97,10 @@ struct SceneObject
 // Declaração de várias funções utilizadas em main().  Essas estão definidas
 // logo após a definição de main() neste arquivo.
 
+void LoadData(); // Carrega todos os objetos e texturas da cena
+void SaveNumbers(); // Carrega os objetos que serão os números do scoreboard
+
+void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool ortho); // FUNÇÃO FODA
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
 void LoadTextureImage(const char* filename); // Função que carrega imagens de textura
@@ -106,6 +110,7 @@ GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
 void LoadShader(const char* filename, GLuint shader_id); // Função utilizada pelas duas acima
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
+void PrintDebugs(); // Função para debugging
 
 // Funções callback para comunicação com o sistema operacional e interação do
 // usuário. Veja mais comentários nas definições das mesmas, abaixo.
@@ -115,8 +120,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
-void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool ortho);
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -151,6 +154,9 @@ GLint object_id_uniform;
 GLint bbox_min_uniform;
 GLint bbox_max_uniform;
 
+// Variáveis de print de debugs
+bool g_ShowDebugs = false;
+
 // SHADEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEER
 Shader sh_hoff;
 Shader sh_para_o_power_bar;
@@ -158,20 +164,131 @@ Shader sh_para_o_power_bar;
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
-#define SPHERE     0
-#define BUNNY      1
-#define PLANE      2
-#define COURT      3
-#define BACKBOARD  4
-#define SKYBOX     5
-#define GLASS      6
-#define CUBE       7
-#define HAND       8
-#define HOOP       9
-#define POWERBAR  10
+#define SPHERE              0
+#define BUNNY               1
+#define PLANE               2
+#define COURT               3
+#define BACKBOARD           4
+#define SKYBOX              5
+#define GLASS               6
+#define CUBE                7
+#define HAND                8
+#define HOOP                9
+#define POWERBAR           10
+#define SCOREBOARD         11
+#define TIME               12
+#define POINTS             13
+#define PERIOD             14
+#define BBOX               15
 
-// Função que renderiza a interface do usuário
-void RenderUI();
+// Constrói triângulos para futura renderização
+GLuint BuildTriangles()
+{
+    // Primeiro, definimos os atributos de cada vértice.
+    GLfloat NDC_coefficients[2*4];
+    NDC_coefficients[0] = 0.0f;//camera_position_c.x;   // X
+    NDC_coefficients[1] = 0.0f;//camera_position_c.y;   // Y
+    NDC_coefficients[2] = 0.0f;//camera_position_c.z;   // Z
+    NDC_coefficients[3] = 1.0f;                  // W
+
+    NDC_coefficients[4] = 0.0f;//camera_position_c.x+camera_view_vector.x;   // X
+    NDC_coefficients[5] = 0.0f;//camera_position_c.y+camera_view_vector.y;   // Y
+    NDC_coefficients[6] = 1.0f;//camera_position_c.z+camera_view_vector.z;   // Z
+    NDC_coefficients[7] = 1.0f;                                       // W
+
+    GLuint VBO_NDC_coefficients_id;
+    glGenBuffers(1, &VBO_NDC_coefficients_id);
+
+    GLuint vertex_array_object_id;
+    glGenVertexArrays(1, &vertex_array_object_id);
+
+    glBindVertexArray(vertex_array_object_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_NDC_coefficients_id);
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_coefficients), NULL, GL_STATIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(NDC_coefficients), NDC_coefficients);
+
+    GLuint location = 0; // "(location = 0)" em "shader_vertex.glsl"
+    GLint  number_of_dimensions = 4; // vec4 em "shader_vertex.glsl"
+    glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glEnableVertexAttribArray(location);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // Agora repetimos todos os passos acima para atribuir um novo atributo a
+    // cada vértice: uma cor (veja slides 109-112 do documento Aula_03_Rendering_Pipeline_Grafico.pdf e slide 111 do documento Aula_04_Modelagem_Geometrica_3D.pdf).
+    // Tal cor é definida como coeficientes RGBA: Red, Green, Blue, Alpha;
+    // isto é: Vermelho, Verde, Azul, Alpha (valor de transparência).
+    // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
+    GLfloat color_coefficients[2*4];
+    color_coefficients[0] = 1.0f; // R
+    color_coefficients[1] = 0.0f; // G
+    color_coefficients[2] = 0.0f; // B
+    color_coefficients[3] = 1.0f; // A
+
+    color_coefficients[4] = 1.0f; // R
+    color_coefficients[5] = 0.0f; // G
+    color_coefficients[6] = 0.0f; // B
+    color_coefficients[7] = 1.0f; // A
+
+    GLuint VBO_color_coefficients_id;
+    glGenBuffers(1, &VBO_color_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_color_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(color_coefficients), NULL, GL_STATIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(color_coefficients), color_coefficients);
+    location = 1; // "(location = 1)" em "shader_vertex.glsl"
+    number_of_dimensions = 4; // vec4 em "shader_vertex.glsl"
+    glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(location);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    GLubyte indices[2]; // GLubyte: valores entre 0 e 255 (8 bits sem sinal).
+    indices[0] = 0, indices[1] = 1;
+
+    // Criamos um buffer OpenGL para armazenar os índices acima
+    GLuint indices_id;
+    glGenBuffers(1, &indices_id);
+
+    // "Ligamos" o buffer. Note que o tipo agora é GL_ELEMENT_ARRAY_BUFFER.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
+
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), NULL, GL_STATIC_DRAW);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, sizeof(indices), indices);
+
+    // "Desligamos" o VAO, evitando assim que operações posteriores venham a
+    // alterar o mesmo. Isso evita bugs.
+    glBindVertexArray(0);
+
+    // Retornamos o ID do VAO. Isso é tudo que será necessário para renderizar
+    // os triângulos definidos acima. Veja a chamada glDrawElements() em main().
+    return vertex_array_object_id;
+}
+
+glm::mat4 lookat(glm::vec3 cu)
+{
+    glm::vec3 worldUp = glm::vec3(0.0f,1.0f,0.0f);
+    cu = glm::normalize(cu);
+
+    glm::vec3 axis = glm::cross(glm::vec3(0.0, 0.0, -1.0), cu);
+    float w = 1.0f + glm::dot(glm::vec3(0.0, 0.0, -1.0), cu);
+
+    glm::quat rotation = glm::normalize(glm::quat(w, axis));
+
+    glm::vec3 fronte = glm::vec3(0.0,0.0,1.0);
+    glm::vec3 up = glm::vec3(0.0,1.0,0.0);
+
+    glm::vec3 realUp = glm::normalize(glm::cross(glm::cross(fronte, worldUp), fronte));
+
+    axis = glm::cross(up, realUp);
+    w = 1.0f + glm::dot(up, realUp);
+
+    rotation = glm::normalize(glm::quat(w, axis)) * rotation;
+
+    glm::vec3 r = glm::eulerAngles(rotation);
+
+    return Matrix_Rotate_Z(r.z) * Matrix_Rotate_Y(r.y) * Matrix_Rotate_X(r.x);
+}
 
 int main(int argc, char* argv[])
 {
@@ -246,60 +363,8 @@ int main(int argc, char* argv[])
     sh_hoff = Shader("../../src/shader_vertex.glsl","../../src/shader_fragment.glsl");
     sh_para_o_power_bar = Shader("../../src/shader_vertex_power_bar.glsl","../../src/shader_fragment_power_bar.glsl");
 
-    // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImageCourt
-    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImageBall
-    LoadTextureImage("../../data/textures/skybox/warriors_skybox.png");  // TextureImageSkybox
-    LoadTextureImage("../../data/textures/hoop/hoop.png");             // TextureImageHoop
-
-    // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel spheremodel("../../data/objects/sphere.obj");
-    ComputeNormals(&spheremodel);
-    BuildTrianglesAndAddToVirtualScene(&spheremodel);
-
-    ObjModel bunnymodel("../../data/objects/bunny.obj");
-    ComputeNormals(&bunnymodel);
-    BuildTrianglesAndAddToVirtualScene(&bunnymodel);
-
-    ObjModel planemodel("../../data/objects/plane.obj");
-    ComputeNormals(&planemodel);
-    BuildTrianglesAndAddToVirtualScene(&planemodel);
-
-    ObjModel courtmodel("../../data/objects/basketball_court.obj");
-    ComputeNormals(&courtmodel);
-    BuildTrianglesAndAddToVirtualScene(&courtmodel);
-
-    ObjModel cubemodel("../../data/objects/cube.obj");
-    ComputeNormals(&cubemodel);
-    BuildTrianglesAndAddToVirtualScene(&cubemodel);
-
-    ObjModel backboardmodel("../../data/objects/basketball_backboard.obj");
-    ComputeNormals(&backboardmodel);
-    BuildTrianglesAndAddToVirtualScene(&backboardmodel);
-
-    ObjModel glassmodel("../../data/objects/backboard_glass.obj");
-    ComputeNormals(&glassmodel);
-    BuildTrianglesAndAddToVirtualScene(&glassmodel);
-
-    ObjModel skybox("../../data/objects/skybox.obj");
-    ComputeNormals(&skybox);
-    BuildTrianglesAndAddToVirtualScene(&skybox);
-
-    ObjModel hoop("../../data/objects/hoop.obj");
-    ComputeNormals(&hoop);
-    BuildTrianglesAndAddToVirtualScene(&hoop);
-
-    // TESTE POWER BAR =====================
-    ObjModel powerbar("../../data/objects/powerbar.obj");
-    ComputeNormals(&powerbar);
-    BuildTrianglesAndAddToVirtualScene(&powerbar);
-    // =====================================
-
-    if ( argc > 1 )
-    {
-        ObjModel model(argv[1]);
-        BuildTrianglesAndAddToVirtualScene(&model);
-    }
+    // Carregamos as texturas e .objs do jogo
+    LoadData();
 
     // Inicializamos o código para renderização de texto.
     TextRendering_Init();
@@ -311,6 +376,12 @@ int main(int argc, char* argv[])
     //glEnable(GL_CULL_FACE);
     //glCullFace(GL_BACK);
     //glFrontFace(GL_CCW);
+
+    // Setamos as bbox dos objetos fixos para serem utilizadas nas funções de colisão
+    SetWallsBboxes(g_VirtualScene["plane"].bbox_max, g_VirtualScene["plane"].bbox_min);
+    SetPoleBboxes(g_VirtualScene["cube"].bbox_max, g_VirtualScene["cube"].bbox_min);
+    SetBackboardBboxes(g_VirtualScene["cube"].bbox_max, g_VirtualScene["cube"].bbox_min);
+    SetMissRimBboxes(g_VirtualScene["cube"].bbox_max, g_VirtualScene["cube"].bbox_min);
 
     camera_time_prev = glfwGetTime();
 
@@ -330,8 +401,8 @@ int main(int argc, char* argv[])
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Movimenta a câmera
-        MoveFreeCamera();
-
+        MoveFreeCamera(g_VirtualScene["cube"].bbox_max, g_VirtualScene["cube"].bbox_min,
+                       g_VirtualScene["plane"].bbox_max, g_VirtualScene["plane"].bbox_min);
 
         // DESENHOS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         glm::mat4 model = Matrix_Identity();
@@ -358,10 +429,21 @@ int main(int argc, char* argv[])
             RenderObject("hoop",cur_model,HOOP,false);
 
         // TESTE POWER BAR =============================================================
-        glm::vec4 teste = camera_view_vector+camera_position_c;
-        model = TransformHoop()[0];
+        model = TransformPowerbar();
         RenderObject("powerbar",model,POWERBAR,true);
 
+        for (auto cur_model : TransformScoreboard())
+            RenderObject("scoreboard",cur_model,SCOREBOARD,false);
+        for (auto cur_model : TransformScoreboardTime())
+            RenderObject(cur_model.second,cur_model.first,TIME,false);
+        for (auto cur_model : TransformScoreboardPoints())
+            RenderObject(cur_model.second,cur_model.first,POINTS,false);
+        for (auto cur_model : TransformScoreboardPeriod())
+            RenderObject(cur_model.second,cur_model.first,PERIOD,false);
+
+        // Desenhamos o modelo dos debugs, se eles devem aparecer
+        if (g_ShowDebugs)
+            PrintDebugs();
 
         // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
         TextRendering_ShowProjection(window);
@@ -389,6 +471,109 @@ int main(int argc, char* argv[])
 
     // Fim do programa
     return 0;
+}
+
+// Função que carrega todos os objetos e texturas da cena
+void LoadData()
+{
+    // Carregamos as imagens para serem utilizadas como textura
+
+    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImageBall
+    LoadTextureImage("../../data/textures/hoop/hoop.png");                 // TextureImageHoop
+    LoadTextureImage("../../data/textures/score/scoreboard.png");          // TextureImageScoreboard
+    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImageCourtWarriors
+    LoadTextureImage("../../data/textures/skybox/warriors_skybox.png");    // TextureImageSkyboxWarriors
+    LoadTextureImage("../../data/textures/court/beach_court.png");         // TextureImageCourtBeach
+    LoadTextureImage("../../data/textures/skybox/beach_skybox.png");       // TextureImageSkyboxBeach
+    LoadTextureImage("../../data/textures/ball/beach_ball.png");         // TextureImageBallBeach
+
+    // Construímos a representação de objetos geométricos através de malhas de triângulos
+    ObjModel bunnymodel("../../data/objects/bunny.obj");
+    ComputeNormals(&bunnymodel);
+    BuildTrianglesAndAddToVirtualScene(&bunnymodel);
+
+    ObjModel planemodel("../../data/objects/plane.obj");
+    ComputeNormals(&planemodel);
+    BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    ObjModel cubemodel("../../data/objects/cube.obj");
+    ComputeNormals(&cubemodel);
+    BuildTrianglesAndAddToVirtualScene(&cubemodel);
+
+    ObjModel spheremodel("../../data/objects/sphere.obj");
+    ComputeNormals(&spheremodel);
+    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+
+    ObjModel courtmodel("../../data/objects/basketball_court.obj");
+    ComputeNormals(&courtmodel);
+    BuildTrianglesAndAddToVirtualScene(&courtmodel);
+
+    ObjModel skybox("../../data/objects/skybox.obj");
+    ComputeNormals(&skybox);
+    BuildTrianglesAndAddToVirtualScene(&skybox);
+
+    ObjModel hoop("../../data/objects/hoop.obj");
+    ComputeNormals(&hoop);
+    BuildTrianglesAndAddToVirtualScene(&hoop);
+
+    // TESTE POWER BAR =====================
+    ObjModel powerbar("../../data/objects/powerbar.obj");
+    ComputeNormals(&powerbar);
+    BuildTrianglesAndAddToVirtualScene(&powerbar);
+
+    ObjModel scoreboard("../../data/objects/scoreboard.obj");
+    ComputeNormals(&scoreboard);
+    BuildTrianglesAndAddToVirtualScene(&scoreboard);
+    SaveNumbers();
+}
+
+// Função que carrega os objetos que serão os números do scoreboard
+void SaveNumbers()
+{
+    // 0
+    ObjModel num0("../../data/objects/numbers/0.obj");
+    ComputeNormals(&num0);
+    BuildTrianglesAndAddToVirtualScene(&num0);
+    // 1
+    ObjModel num1("../../data/objects/numbers/1.obj");
+    ComputeNormals(&num1);
+    BuildTrianglesAndAddToVirtualScene(&num1);
+    // 2
+    ObjModel num2("../../data/objects/numbers/2.obj");
+    ComputeNormals(&num2);
+    BuildTrianglesAndAddToVirtualScene(&num2);
+    // 3
+    ObjModel num3("../../data/objects/numbers/3.obj");
+    ComputeNormals(&num3);
+    BuildTrianglesAndAddToVirtualScene(&num3);
+    // 4
+    ObjModel num4("../../data/objects/numbers/4.obj");
+    ComputeNormals(&num4);
+    BuildTrianglesAndAddToVirtualScene(&num4);
+    // 5
+    ObjModel num5("../../data/objects/numbers/5.obj");
+    ComputeNormals(&num5);
+    BuildTrianglesAndAddToVirtualScene(&num5);
+    // 6
+    ObjModel num6("../../data/objects/numbers/6.obj");
+    ComputeNormals(&num6);
+    BuildTrianglesAndAddToVirtualScene(&num6);
+    // 7
+    ObjModel num7("../../data/objects/numbers/7.obj");
+    ComputeNormals(&num7);
+    BuildTrianglesAndAddToVirtualScene(&num7);
+    // 8
+    ObjModel num8("../../data/objects/numbers/8.obj");
+    ComputeNormals(&num8);
+    BuildTrianglesAndAddToVirtualScene(&num8);
+    // 9
+    ObjModel num9("../../data/objects/numbers/9.obj");
+    ComputeNormals(&num9);
+    BuildTrianglesAndAddToVirtualScene(&num9);
+    // :
+    ObjModel two_points("../../data/objects/numbers/two_points.obj");
+    ComputeNormals(&two_points);
+    BuildTrianglesAndAddToVirtualScene(&two_points);
 }
 
 // FUNÇÃO FODA
@@ -419,7 +604,7 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool 
     float nearplane = -0.2f;  // Posição do "near plane"
     float farplane  = -40.0f; // Posição do "far plane"
 
-    glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    glm::mat4 view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
 
     if (ortho)
     {
@@ -459,7 +644,7 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool 
     }
     else if (theobject.name == "powerbar")
     {
-        current_used_shader.setFloat4("cameraPosition",camera_position_c);
+        current_used_shader.setFloat4("cameraPosition",camera_position);
         current_used_shader.setFloat2("spriteSize", glm::vec2(0.2f,0.5f));
         current_used_shader.setFloat2("barPosition",glm::vec2(0.0f,-1.0f));
     }
@@ -467,13 +652,20 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool 
     current_used_shader.setMatrix4("model",model);
     current_used_shader.setInt("object_id",object_id);
 
+    current_used_shader.setBool("CourtIsInTheBeach",CourtIsInTheBeach);
+    current_used_shader.setBool("GouradShading",GouradShading);
+
     current_used_shader.setFloat4("bbox_min", glm::vec4(theobject.bbox_min,1.0f));
     current_used_shader.setFloat4("bbox_max", glm::vec4(theobject.bbox_max,1.0f));
 
-    current_used_shader.setInt("TextureImageCourt",0);
-    current_used_shader.setInt("TextureImageBall",1);
-    current_used_shader.setInt("TextureImageSkybox",2);
-    current_used_shader.setInt("TextureImageHoop",3);
+    current_used_shader.setInt("TextureImageBall",0);
+    current_used_shader.setInt("TextureImageHoop",1);
+    current_used_shader.setInt("TextureImageScoreboard",2);
+    current_used_shader.setInt("TextureImageCourtWarriors",3);
+    current_used_shader.setInt("TextureImageSkyboxWarriors",4);
+    current_used_shader.setInt("TextureImageCourtBeach",5);
+    current_used_shader.setInt("TextureImageSkyboxBeach",6);
+    current_used_shader.setInt("TextureImageBallBeach",7);
 
     DrawVirtualObject(theobject.name.c_str());
 }
@@ -763,8 +955,6 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), NULL, GL_STATIC_DRAW);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, indices.size() * sizeof(GLuint), indices.data());
-    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); // XXX Errado!
-    //
 
     // "Desligamos" o VAO, evitando assim que operações posteriores venham a
     // alterar o mesmo. Isso evita bugs.
@@ -1009,22 +1199,6 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
     // parâmetros que definem a posição da câmera dentro da cena virtual.
     // Assim, temos que o usuário consegue controlar a câmera.
 
-    if (g_MiddleMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_TorsoPositionX += 0.01f*dx;
-        g_TorsoPositionY -= 0.01f*dy;
-
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
-
     if (g_RightMouseButtonPressed)
     {
         // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
@@ -1077,7 +1251,7 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
     // Atualizamos a distância da câmera para a origem utilizando a
     // movimentação da "rodinha", simulando um ZOOM.
-    g_CameraDistance -= 0.1f*yoffset;
+    //g_CameraDistance -= 0.1f*yoffset;
 
     // Uma câmera look-at nunca pode estar exatamente "em cima" do ponto para
     // onde ela está olhando, pois isto gera problemas de divisão por zero na
@@ -1117,35 +1291,32 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
     if (key == GLFW_KEY_X && action == GLFW_PRESS)
     {
-        g_RightArmAngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        g_LeftArmAngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        printf("%f\n", g_RightArmAngleX);
+        g_ShowDebugs = !g_ShowDebugs;
     }
 
-    if (key == GLFW_KEY_Y && action == GLFW_PRESS)
-    {
-        g_RightArmAngleY += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        g_LeftArmAngleY += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        printf("%f\n", g_RightArmAngleY);
-    }
-    if (key == GLFW_KEY_Z && action == GLFW_PRESS)
-    {
-        g_RightArmAngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        g_LeftArmAngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-        printf("%f\n", g_RightArmAngleZ);
-    }
-
-    // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
+    // Se o usuário apertar a tecla espaço, pula
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !g_PlayerIsJumping)
     {
         g_PlayerIsJumping = true;
         player_jump_time_prev = glfwGetTime();
     }
 
-    // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
-    if (key == GLFW_KEY_H && action == GLFW_PRESS)
-    {
-        g_ShowInfoText = !g_ShowInfoText;
+    // Se o usuário apertar a tecla C, mudamos a definição da câmera (free ou look-at).
+    if (key == GLFW_KEY_C && action == GLFW_PRESS)
+	{
+        isCameraLookAt = !isCameraLookAt;
+    }
+
+    // Se o usuário apertar a tecla G, mudamos a interpolação da bola (Gourad ou Phong shading)
+    if (key == GLFW_KEY_G && action == GLFW_PRESS)
+	{
+        GouradShading = !GouradShading;
+    }
+
+    // Se o usuário apertar a tecla T, mudamos a textura da quadra e da skybox
+    if (key == GLFW_KEY_T && action == GLFW_PRESS)
+	{
+        CourtIsInTheBeach = !CourtIsInTheBeach;
     }
 
     // Se o usuário apertar a tecla W,
@@ -1221,16 +1392,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         }
     }
 
-    // Debug apenas
-    if (key == GLFW_KEY_B)
-    {
-        //camera_position_c.y += 0.01f;
-        printf("%f %f %f\n", camera_position_c.x, camera_position_c.y, camera_position_c.z);
-        printf("%f %f %f\n", g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ);
-    }
-
     // Se o usuário apertar a tecla f, arremessa a bola.
-    if (key == GLFW_KEY_F && (!g_PlayerIsShooting || g_MeasuringStrength))
+    if (key == GLFW_KEY_F && (!g_PlayerIsShooting || g_MeasuringStrength) && !g_BallWasShot)
     {
         if (action == GLFW_PRESS && !g_PlayerIsShooting && !g_MeasuringStrength)
         {
@@ -1426,6 +1589,46 @@ void PrintObjModelInfo(ObjModel* model)
     }
     printf("\n");
   }
+}
+
+// Função para debuggin: desenha as bbox de colisão dos objetos
+void PrintDebugs()
+{
+    glm::mat4 model = Matrix_Identity();
+
+    // DEBUG RIM COLLIDER
+    for (auto cur_model : TransformRimCollider())
+        RenderObject("sphere",cur_model,BBOX,false);
+
+    // DEBUG POLE COLLIDER
+    for (auto cur_model : TransformPoleCollider())
+        RenderObject("cube",cur_model,BBOX,false);
+
+    // DEBUG PLAYER COLLIDER
+    model = TransformPlayerCollider();
+    RenderObject("cube",model,BBOX,false);
+
+    // DEBUG WALL COLLIDER
+    for (auto cur_model : TransformWallCollider())
+        RenderObject("plane",cur_model,BBOX,false);
+
+    // DEBUG BACKBOARD COLLIDER
+    for (auto cur_model : TransformBackboardCollider())
+        RenderObject("cube",cur_model,BBOX,false);
+
+    // DEBUG MISS RIM COLLIDER
+    for (auto cur_model : TransformMissRimCollider())
+        RenderObject("cube",cur_model,BBOX,false);
+
+    // DEBUG BEZIER CURVE POINTS
+    model = Matrix_Translate(p1.x,p1.y,p1.z);
+    RenderObject("1",model,TIME,false);
+    model = Matrix_Translate(p2.x,p2.y,p2.z);
+    RenderObject("2",model,TIME,false);
+    model = Matrix_Translate(p3.x,p3.y,p3.z);
+    RenderObject("3",model,TIME,false);
+    model = Matrix_Translate(p4.x,p4.y,p4.z);
+    RenderObject("4",model,TIME,false);
 }
 
 // set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null

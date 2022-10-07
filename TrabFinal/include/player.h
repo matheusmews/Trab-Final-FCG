@@ -73,6 +73,13 @@ extern bool g_PlayerStartedShot;
 extern bool g_PlayerIsShooting;
 extern bool g_PlayerIsJumping;
 
+extern bool g_MeasuringStrength;
+extern GLfloat measure_time_prev;
+extern GLfloat measure_time_now;
+extern GLfloat measure_delta_time;
+
+void MeasureShotStrength();
+
 // Matriz que guarda as transformações que chegam na mão direita do player,
 // para fazer a animação de arremesso
 extern glm::mat4 right_hand_model;
@@ -84,6 +91,9 @@ void PopMatrix(glm::mat4& M);
 
 // Função que desenha o jogador através da modelagem de várias instâncias de um cubo
 std::vector<glm::mat4> TransformPlayer();
+
+// Função que transforma o collider do player
+glm::mat4 TransformPlayerCollider();
 
 // Função que anima a movimentação do jogador
 void AnimatePlayerMovement();

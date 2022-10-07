@@ -30,6 +30,13 @@
 #include "utils.h"
 #include "matrices.h"
 
+// Variáveis externas
+extern GLfloat time_game;
+extern GLint points_p1;
+extern GLint points_p2;
+
+extern int CourtIsInTheBeach;
+
 // Função que desenha o chão da quadra
 glm::mat4 TransformCourt();
 
@@ -38,5 +45,34 @@ std::vector<glm::mat4> TransformHoop();
 
 // Função que desenha o plano de fundo do cenário
 glm::mat4 TransformSkybox();
+
+// Função que desenha a power bar que mede a força do arremesso
+glm::mat4 TransformPowerbar();
+
+// Função que transforma a matriz de modelo do scoreboard
+std::vector<glm::mat4> TransformScoreboard();
+// Função que transforma a matriz de modelo do tempo contabilizado no scoreboard
+std::vector<std::pair<glm::mat4,std::string>> TransformScoreboardTime();
+// Função que transforma a matriz de modelo dos pontos contabilizados no scoreboard
+std::vector<std::pair<glm::mat4,std::string>> TransformScoreboardPoints();
+// Função que transforma a matriz de modelo do período contabilizado no scoreboard
+std::vector<std::pair<glm::mat4,std::string>> TransformScoreboardPeriod();
+
+// COLLIDERS TRANSFORM ======================================================
+
+// Função que transforma o collider de parede
+std::vector<glm::mat4> TransformWallCollider();
+
+// Função que transforma o collider do poste
+std::vector<glm::mat4> TransformPoleCollider();
+
+// Função que transforma o collider da tabela
+std::vector<glm::mat4> TransformBackboardCollider();
+
+// Função que transforma o collider do aro
+std::vector<glm::mat4> TransformRimCollider();
+
+// Função que transforma o collider do aro quando o player erra
+std::vector<glm::mat4> TransformMissRimCollider();
 
 #endif // _SCENARIO_H

@@ -74,6 +74,12 @@ bool g_PlayerStartedShot = false;
 bool g_PlayerIsShooting = false;
 bool g_PlayerIsJumping = false;
 
+// Variáveis que controlam o arremesso
+bool g_MeasuringStrength = false;
+GLfloat measure_time_prev;
+GLfloat measure_time_now;
+GLfloat measure_delta_time;
+
 // Matriz que guarda as transformações que chegam na mão direita do player,
 // para fazer a animação de arremesso
 glm::mat4 right_hand_model;
@@ -290,6 +296,18 @@ std::vector<glm::mat4> TransformPlayer()
     return player_models;
 }
 
+// Função que transforma o collider do player
+glm::mat4 TransformPlayerCollider()
+{
+    glm::vec4 cu = glm::vec4(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ, 0.0f) + (movement_vector * 0.15f);
+
+
+    glm::mat4 model = Matrix_Translate(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ)
+                    * Matrix_Scale(0.6f, 1.80f, 0.4f);
+
+    return model;
+}
+
 // Função que anima a movimentação do jogador
 void AnimatePlayerMovement()
 {
@@ -356,25 +374,47 @@ void AnimatePlayerMovement()
 // Função que anima o pulo do jogador
 void AnimatePlayerJump()
 {
-    float delta_jump = 0.01;
-    float max_jump_height = 3.5f;
+    float delta_jump = 3.0f;
+    float max_jump_height = 3.3f;
 
-    player_time_now = glfwGetTime();
-    player_delta_time = player_time_now - player_time_prev;
-    player_time_prev = player_time_now;
+    player_jump_time_now = glfwGetTime();
+    player_jump_delta_time = player_jump_time_now - player_jump_time_prev;
+    player_jump_time_prev = player_jump_time_now;
 
-    camera_position_c.y += delta_jump * jump_direction;
+    camera_position_c.y += delta_jump * jump_direction * player_jump_delta_time;
 
     if (camera_position_c.y > max_jump_height)
     {
         camera_position_c.y = max_jump_height;
         jump_direction = -1;
     }
-    else if (camera_position_c.y < 2.06)
+    else if (camera_position_c.y < 1.80)
     {
-        camera_position_c.y = 2.06;
+        camera_position_c.y = 1.80;
         jump_direction = 1;
         g_PlayerIsJumping = false;
+    }
+}
+
+// Função que mede a força do arremesso
+void MeasureShotStrength()
+{
+    //printf("medindo\n");
+    measure_time_now = glfwGetTime();
+    measure_delta_time = measure_time_now-measure_time_prev;
+
+    //printf("%f\n", measure_delta_time);
+
+    if (measure_delta_time > 0.5f && !g_PlayerIsShooting)
+    {
+        player_time_prev = glfwGetTime();
+        g_PlayerIsShooting = true;
+        //printf("player pode chutar\n");
+    }
+    else if (measure_delta_time > 1.2f && g_PlayerIsShooting)
+    {
+        g_MeasuringStrength = false;
+        //printf("tah na hora de soltar\n");
     }
 }
 
@@ -398,8 +438,6 @@ void AnimatePlayerShot()
     player_time_now = glfwGetTime();
     player_delta_time = player_time_now - player_time_prev;
     player_time_prev = player_time_now;
-
-
 
     switch(player_shooting_animation_part)
     {
@@ -456,38 +494,84 @@ void AnimatePlayerShot()
                     //g_RightForearmAngleX = max_right_forearm_angle_shot;
                     //g_RightForearmAngleZ = max_right_forearm_angle_shot;
 
-                    player_shooting_animation_part += 1;
-
                     g_BallWasShot = true;
                     ball_time_prev = glfwGetTime();
                     ball_t = 0.0f;
 
-                    glm::vec4 norm_cvv = glm::normalize(camera_view_vector);
+                    //ball_position_c = glm::vec4(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ, 1.0f) * right_hand_model;
 
-                    p1.x = ball_position_c.x+0.0f*norm_cvv.x;
-                    p2.x = ball_position_c.x+2.4f*norm_cvv.x;
-                    p3.x = ball_position_c.x+4.8f*norm_cvv.x;
-                    p4.x = ball_position_c.x+7.2f*norm_cvv.x;
+                    //printf("%f %f %f\n", ball_position_c.x, ball_position_c.y, ball_position_c.z);
+                    glm::vec4 norm_cvv = glm::normalize(camera_view_vector_shot);
 
-                    p1.y = ball_position_c.y;
-                    p2.y = ball_position_c.y+4.0f;
-                    p3.y = ball_position_c.y+4.0f;
-                    p4.y = 0.0f;
+                    GLfloat distance_shot = porcentagem();
 
-                    p1.z = ball_position_c.z+0.0f*norm_cvv.z;
-                    p2.z = ball_position_c.z+2.4f*norm_cvv.z;
-                    p3.z = ball_position_c.z+4.8f*norm_cvv.z;
-                    p4.z = ball_position_c.z+7.2f*norm_cvv.z;
+                    printf("dist x = %f\n", distance_shot);
+                    printf("view vector: %f %f %f\n", camera_view_vector_shot.x, camera_view_vector_shot.y, camera_view_vector_shot.z);
+                    printf("ball position: %f %f %f\n", ball_position_c.x, ball_position_c.y, ball_position_c.z);
+
+
+                    p1.x = ball_position_c.x + 0.0f*camera_view_vector_shot.x;
+                    p2.x = ball_position_c.x + (distance_shot/3.0f)*camera_view_vector_shot.x;
+                    p3.x = ball_position_c.x + (2*distance_shot/3.0f)*camera_view_vector_shot.x;
+                    p4.x = ball_position_c.x + (distance_shot)*camera_view_vector_shot.x;
+
+                    p1.y = ball_position_c.y + 0.7f;
+                    p2.y = ball_position_c.y + std::max(3.5f,(distance_shot*0.55f));
+                    p3.y = ball_position_c.y + std::max(3.5f,(distance_shot*0.55f));
+                    p4.y = 3.0f;
+
+                    p1.z = ball_position_c.z + 0.0f*camera_view_vector_shot.z;
+                    p2.z = ball_position_c.z + (distance_shot/3.0f)*camera_view_vector_shot.z;
+                    p3.z = ball_position_c.z + (2*distance_shot/3.0f)*camera_view_vector_shot.z;
+                    p4.z = ball_position_c.z + (distance_shot)*camera_view_vector_shot.z;
+
+                    printf("p1: %f %f %f\n", p1.x,p1.y,p1.z);
+                    printf("p2: %f %f %f\n", p2.x,p2.y,p2.z);
+                    printf("p3: %f %f %f\n", p3.x,p3.y,p3.z);
+                    printf("p4: %f %f %f\n", p4.x,p4.y,p4.z);
+
+                    BALL_SPEED = 0.3f;
+                    if (distance_shot < 3.5f)
+                        BALL_SPEED = 0.55f;
+
+                    whichRimWillBallCollide = BallWillCollideWithRim();
+                    if (whichRimWillBallCollide != 1 && whichRimWillBallCollide != 2)
+                    {
+                        g_BucketShot = false;
+                        MAX_T = 1.25f;
+                    }
+                    else
+                    {
+                        g_BucketShot = true;
+                        g_BallOnRim = false;
+                        MAX_T = 1.0f;
+
+                        printf("fodase");
+                        printf("%f %f %f ss\n", p4.x, p4.y, p4.z);
+                    }
+
+                    player_shooting_animation_part += 1;
                 }
-
             }
             break;
 
         case 4:
-            g_RightArmAngleX += player_delta_time * delta_arm/5;
-            g_LeftArmAngleX += player_delta_time * delta_arm/5;
+            if (g_RightArmAngleX < 0.0f)
+                g_RightArmAngleX += player_delta_time * delta_arm/5;
+            if (g_LeftArmAngleX < 0.0f)
+                g_LeftArmAngleX += player_delta_time * delta_arm/5;
+            if (g_RightForearmAngleX < 0.0f)
+                g_RightForearmAngleX += player_delta_time * delta_forearm/5;
+            if (g_RightForearmAngleZ > 0.0f)
+                g_RightForearmAngleZ -= player_delta_time * delta_forearm/5;
+            if (g_LeftForearmAngleX < 0.0f)
+                g_LeftForearmAngleX += player_delta_time * delta_forearm/5;
+            if (g_LeftForearmAngleZ < 0.0f)
+                g_LeftForearmAngleZ += player_delta_time * delta_forearm/5;
 
-            if (g_LeftArmAngleX > 0.0f)
+            if (g_RightArmAngleX >= 0.0f && g_LeftArmAngleX >= 0.0f &&
+                g_RightForearmAngleX >= 0.0f && g_RightForearmAngleZ <= 0.0f &&
+                g_LeftForearmAngleX >= 0.0f && g_LeftForearmAngleZ >= 0.0f)
             {
                 g_RightArmAngleX = 0.0f;
                 g_LeftArmAngleX = 0.0f;

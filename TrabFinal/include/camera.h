@@ -36,9 +36,17 @@ extern float g_CameraTheta;
 extern float g_CameraPhi;
 extern float g_CameraDistance;
 
+extern bool isCameraLookAt;
+
 extern glm::vec4 camera_position_c;
 extern glm::vec4 camera_view_vector;
 extern glm::vec4 camera_up_vector;
+
+// camera_position que vai ser enviada para matriz view, a
+// variável camera_position_c é para a movimentação do player
+extern glm::vec4 camera_position;
+
+extern glm::vec4 camera_view_vector_shot;
 
 extern glm::vec4 movement_vector;
 
@@ -47,6 +55,7 @@ extern int camera_movement_keys[];
 extern GLfloat camera_time_prev;
 
 // Função que movimenta a câmera baseado nas teclas W, S, A, D e na movimentação do mouse
-void MoveFreeCamera();
+void MoveFreeCamera(glm::vec3 bbox_cube_max, glm::vec3 bbox_cube_min,
+                    glm::vec3 bbox_plane_max, glm::vec3 bbox_plane_min);
 
 #endif // _CAMERA_H

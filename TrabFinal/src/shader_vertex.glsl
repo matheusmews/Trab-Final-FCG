@@ -20,6 +20,31 @@ out vec4 position_model;
 out vec4 normal;
 out vec2 texcoords;
 
+// Constantes
+#define M_PI   3.14159265358979323846
+#define M_PI_2 1.57079632679489661923
+
+// Identificador que define qual objeto está sendo desenhado no momento
+#define SPHERE     0
+#define BUNNY      1
+#define PLANE      2
+#define COURT      3
+#define BACKBOARD  4
+#define SKYBOX     5
+#define GLASS      6
+#define CUBE       7
+#define HAND       8
+#define HOOP       9
+
+uniform vec4 bbox_min;
+uniform vec4 bbox_max;
+uniform int object_id;
+uniform sampler2D TextureImageBall;
+uniform sampler2D TextureImageBallBeach;
+out vec4 color_ball_gourad_shading;
+
+uniform bool CourtIsInTheBeach;
+
 void main()
 {
     // A variável gl_Position define a posição final de cada vértice
@@ -63,5 +88,80 @@ void main()
 
     // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
     texcoords = texture_coefficients;
+
+    // Gourad Shading se o objeto for a bola
+    if (object_id == SPHERE)
+    {
+        // Obtemos a posição da câmera utilizando a inversa da matriz que define o
+        // sistema de coordenadas da câmera.
+        vec4 origin = vec4(0.0, 0.0, 0.0, 2.0);
+        vec4 camera_position = inverse(view) * origin;
+
+        // O fragmento atual é coberto por um ponto que percente à superfície de um
+        // dos objetos virtuais da cena. Este ponto, p, possui uma posição no
+        // sistema de coordenadas global (World coordinates). Esta posição é obtida
+        // através da interpolação, feita pelo rasterizador, da posição de cada
+        // vértice.
+        vec4 p = position_world;
+
+        // Normal do fragmento atual, interpolada pelo rasterizador a partir das
+        // normais de cada vértice.
+        vec4 n = normalize(normal);
+
+        // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
+        vec4 l = normalize(vec4(3.0,30.0,0.0,0.0));
+
+        // Vetor que define o sentido da câmera em relação ao ponto atual.
+        vec4 v = normalize(camera_position - p);
+
+        // Vetor que define o sentido da reflexão especular ideal.
+        vec4 r = -l + 2*n*(dot(n,l));
+
+        // Coordenadas de textura U e V
+        float U = 0.0;
+        float V = 0.0;
+
+        // Parâmetros que definem as propriedades espectrais da superfície
+        vec3 Kd; // Refletância difusa
+        vec3 Ks; // Refletância especular
+        vec3 Ka; // Refletância ambiente
+        float q; // Expoente especular para o modelo de iluminação de Phong
+
+        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+
+        float radius = 5.0f;
+
+        vec4 p_line = bbox_center + radius*((position_model - bbox_center)/length(position_model - bbox_center));
+
+        vec4 p_vector = p_line - bbox_center;
+
+        float theta = atan(p_vector.x, p_vector.z);
+        float phi = asin(p_vector.y/radius);
+
+        U = (theta + M_PI)/(2*M_PI);
+        V = (phi + M_PI_2)/M_PI;
+
+        // Propriedades espectrais da esfera
+        Kd = vec3(1.0,1.0,1.0);
+        Ks = vec3(0.0,0.0,0.0);
+        Ka = vec3(0.01,0.01,0.01);
+        q = 1.0;
+
+        if (CourtIsInTheBeach)
+            Kd = texture(TextureImageBallBeach, vec2(U,V)).rgb;
+        else
+            Kd = texture(TextureImageBall, vec2(U,V)).rgb;
+
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*max(0,dot(n,l));
+
+        // Termo ambiente
+        vec3 ambient_term = Ka;
+
+        // Termo especular utilizando o modelo de iluminação de Phong
+        vec3 phong_specular_term  = Ks*pow(max(0,dot(r,v)),q);
+
+        color_ball_gourad_shading.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    }
 }
 

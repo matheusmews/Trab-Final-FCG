@@ -19,16 +19,23 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE     0
-#define BUNNY      1
-#define PLANE      2
-#define COURT      3
-#define BACKBOARD  4
-#define SKYBOX     5
-#define GLASS      6
-#define CUBE       7
-#define HAND       8
-#define HOOP       9
+#define SPHERE              0
+#define BUNNY               1
+#define PLANE               2
+#define COURT               3
+#define BACKBOARD           4
+#define SKYBOX              5
+#define GLASS               6
+#define CUBE                7
+#define HAND                8
+#define HOOP                9
+#define POWERBAR           10
+#define SCOREBOARD         11
+#define TIME               12
+#define POINTS             13
+#define PERIOD             14
+#define BBOX               15
+#define BBOX_COLLIDE       16
 
 uniform int object_id;
 
@@ -37,10 +44,19 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D TextureImageCourt;
 uniform sampler2D TextureImageBall;
-uniform sampler2D TextureImageSkybox;
 uniform sampler2D TextureImageHoop;
+uniform sampler2D TextureImageScoreboard;
+uniform sampler2D TextureImageCourtWarriors;
+uniform sampler2D TextureImageSkyboxWarriors;
+uniform sampler2D TextureImageCourtBeach;
+uniform sampler2D TextureImageSkyboxBeach;
+uniform sampler2D TextureImageBallBeach;
+
+in vec4 color_ball_gourad_shading;
+
+uniform bool CourtIsInTheBeach;
+uniform bool GouradShading;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -88,20 +104,8 @@ void main()
 
     if ( object_id == SPHERE )
     {
-        // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
-        // projeção esférica EM COORDENADAS DO MODELO. Utilize como referência
-        // o slides 134-150 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // A esfera que define a projeção deve estar centrada na posição
-        // "bbox_center" definida abaixo.
-
-        // Você deve utilizar:
-        //   função 'length( )' : comprimento Euclidiano de um vetor
-        //   função 'atan( , )' : arcotangente. Veja https://en.wikipedia.org/wiki/Atan2.
-        //   função 'asin( )'   : seno inverso.
-        //   constante M_PI
-        //   variável position_model
-
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+
         float radius = 5.0f;
 
         vec4 p_line = bbox_center + radius*((position_model - bbox_center)/length(position_model - bbox_center));
@@ -172,24 +176,28 @@ void main()
         Ka = vec3(1.0,1.0,1.0);
         q = 96.078431;
     }
-    else if (object_id == 19 || object_id == 20)
+    else
     {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
+        // Coordenadas de textura do scoreboard, obtidas do arquivo OBJ.
         U = texcoords.x;
         V = texcoords.y;
 
-        // Propriedades espectrais das tabelas
-        Kd = vec3(1.0, 1.0, 1.0);
-        Ks = vec3(0.01,0.01,0.01);
+        // Propriedades espectrais do scoreboard
+        Kd = vec3(1.0,1.0,1.0);
+        Ks = vec3(0.0,0.0,0.0);
         Ka = vec3(1.0,1.0,1.0);
-        q = 96.078431;
+        q = 1.0;
     }
 
     // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImageCourt, vec2(U,V)).rgb;
-    vec3 Kd1 = texture(TextureImageBall, vec2(U,V)).rgb;
-    vec3 Kd2 = texture(TextureImageSkybox, vec2(U,V)).rgb;
-    vec3 Kd3 = texture(TextureImageHoop, vec2(U,V)).rgb;
+    vec3 Kd0 = texture(TextureImageBall, vec2(U,V)).rgb;
+    vec3 Kd1 = texture(TextureImageHoop, vec2(U,V)).rgb;
+    vec3 Kd2 = texture(TextureImageScoreboard, vec2(U,V)).rgb;
+    vec3 Kd3 = texture(TextureImageCourtWarriors, vec2(U,V)).rgb;
+    vec3 Kd4 = texture(TextureImageSkyboxWarriors, vec2(U,V)).rgb;
+    vec3 Kd5 = texture(TextureImageCourtBeach, vec2(U,V)).rgb;
+    vec3 Kd6 = texture(TextureImageSkyboxBeach, vec2(U,V)).rgb;
+    vec3 Kd7 = texture(TextureImageBallBeach, vec2(U,V)).rgb;
 
     // Termo difuso utilizando a lei dos cossenos de Lambert
     vec3 lambert_diffuse_term = Kd*max(0,dot(n,l));
@@ -197,22 +205,51 @@ void main()
     // Termo ambiente
     vec3 ambient_term = Ka;
 
-    // Termo especular utilizando o modelo de iluminação de Phong
-    vec3 phong_specular_term  = Ks*pow(max(0,dot(r,v)),q);
+    // Half-vector (meio do caminho entre v e l)
+    vec4 h = normalize(l + v);
+    // Termo especular utilizando o modelo de iluminação de Blinn-Phong
+    vec3 blinn_phong_specular_term  = Ks*pow(max(0,dot(n,h)),q);
 
-    color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
+    color.rgb = lambert_diffuse_term + ambient_term + blinn_phong_specular_term;
     if (object_id == SPHERE)
-        color.rgb *= Kd1;
+    {
+        if (GouradShading)
+            color.rgb = color_ball_gourad_shading.rgb;
+        else if (CourtIsInTheBeach)
+            color.rgb *= Kd7;
+        else
+            color.rgb *= Kd0;
+    }
     else if (object_id == COURT)
-        color.rgb *= Kd0;
-    else if (object_id == SKYBOX)
-        color.rgb *= Kd2;
-    else if (object_id >= HOOP)
-        color.rgb *= Kd3;
+    {
+        if (CourtIsInTheBeach)
+            color.rgb *= Kd5;
+        else
+            color.rgb *= Kd3;
+    }
     else if (object_id == CUBE)
         color.rgb *= vec3(0.5f, 0.5f, 0.5f);
+    else if (object_id == SKYBOX)
+    {
+        if (CourtIsInTheBeach)
+            color.rgb *= Kd6;
+        else
+            color.rgb *= Kd4;
+    }
+    else if (object_id == HOOP)
+        color.rgb *= Kd1;
+    else if (object_id == SCOREBOARD)
+        color.rgb *= Kd2;
+    else if (object_id == TIME)
+        color.rgb *= vec3(1.0f, 0.0f, 0.0f);
+    else if (object_id == POINTS)
+        color.rgb *= vec3(0.965f, 0.635f, 0.094f);
+    else if (object_id == PERIOD)
+        color.rgb *= vec3(0.435f, 0.700f, 0.15f);
+    else if (object_id == BBOX)
+        color.rgb *= vec3(1.0f, 0.5f, 0.5f);
     else
-        color.rgb *= vec3(0.0f, 0.0f, 0.0f);
+        color.rgb *= vec3(1.0f, 0.0f, 0.0f);
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
