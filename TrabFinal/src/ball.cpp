@@ -52,10 +52,6 @@ glm::mat4 TransformBall()
     if (g_PlayerIsShooting && !g_BallWasShot)
     {
         model = right_hand_model * Matrix_Scale(0.2f, 0.2f, 0.2f);
-        //0.015625
-        //0.02109375
-        //0.015625
-        //printf("a\n");
     }
     else if (g_BallCollided)
     {
@@ -71,6 +67,8 @@ glm::mat4 TransformBall()
     }
     else
     {
+        measure_delta_time = 0.0f;
+
         ball_position_c.x = camera_position_c.x+camera_view_vector_shot.x;
         ball_position_c.y = camera_position_c.y+camera_view_vector_shot.y - 0.2f;
         ball_position_c.z = camera_position_c.z+camera_view_vector_shot.z;
@@ -155,7 +153,6 @@ glm::mat4 TransformBallNonMadeShot()
 {
     glm::mat4 model = Matrix_Identity();
 
-    //printf("%f\n", ball_t);
     ball_time_now = glfwGetTime();
     ball_delta_time = ball_time_now - ball_time_prev;
 
@@ -246,10 +243,6 @@ short BallWillCollideWithRim()
             ball_t = 0.0f;
             return 2;
         }
-
-        //printf("rim 1 center = %f %f %f\n", rim_1_collider_center.x, rim_1_collider_center.y, rim_1_collider_center.z);
-        //printf("rim 2 center = %f %f %f\n", rim_2_collider_center.x, rim_2_collider_center.y, rim_2_collider_center.z);
-        //printf("bola         = %f %f %f\n\n", c.x, c.y, c.z);
     }
 
     ball_t = 0.0f;
@@ -263,24 +256,20 @@ GLfloat porcentagem()
     GLfloat angle_diff_backboard1 = dotproduct(camera_view_vector_shot,backboard1_vector);
     GLfloat angle_diff_backboard2 = dotproduct(camera_view_vector_shot,backboard2_vector);
 
-    printf("%f x %f ===================\n", angle_diff_backboard1, angle_diff_backboard2);
+    GLfloat final_measure = measure_delta_time;
+    if (fabs(1.0f-final_measure) <= 0.015f)
+        final_measure = 1.0f;
 
-    if (fabs(1.0f-measure_delta_time) <= 0.0999f)
-    {
-        measure_delta_time = 1.0f;
-    }
-
-    //measure_delta_time = 1.0f;
-    printf("%f\n", measure_delta_time);
+    //final_measure = 1.0f;
 
     distance_shot;
     if (angle_diff_backboard1 >= angle_diff_backboard2)
     {
-        distance_shot = measure_delta_time * sqrt( powf(ball_position_c.x-(0.0f+camera_view_vector_shot.x*0.14),2) + powf(ball_position_c.z-(12.56+camera_view_vector_shot.z*0.14),2) );
+        distance_shot = final_measure * sqrt( powf(ball_position_c.x-(0.0f+camera_view_vector_shot.x*0.14),2) + powf(ball_position_c.z-(12.56+camera_view_vector_shot.z*0.14),2) );
     }
     else
     {
-        distance_shot = measure_delta_time * sqrt( powf(ball_position_c.x-(0.0f+camera_view_vector_shot.x*0.14),2) + powf(ball_position_c.z-(-12.56+camera_view_vector_shot.z*0.14),2) );
+        distance_shot = final_measure * sqrt( powf(ball_position_c.x-(0.0f+camera_view_vector_shot.x*0.14),2) + powf(ball_position_c.z-(-12.56+camera_view_vector_shot.z*0.14),2) );
     }
 
     return distance_shot;

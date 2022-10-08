@@ -1,3 +1,6 @@
+// SHADER.H FOI BASEADO NA CLASSE DE SHADER DO SITE "Learn Open-GL"
+// FONTE: https://learnopengl.com/Getting-started/Shaders
+
 #ifndef _SHADER_H
 #define _SHADER_H
 

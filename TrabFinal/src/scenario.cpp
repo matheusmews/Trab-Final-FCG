@@ -48,8 +48,8 @@ glm::mat4 TransformSkybox()
     glm::mat4 model = Matrix_Identity();
 
     model = Matrix_Scale(11.5f, 10.0f, 18.0f)
-          * Matrix_Translate(0.0f, 0.1f, 0.0f)
-          * Matrix_Rotate_Y(3.1415f/2);
+          * Matrix_Translate(0.0f, 0.18f, 0.0f)
+          * Matrix_Rotate_Y(3.1415f*3/2);
     return model;
 }
 
@@ -59,7 +59,7 @@ glm::mat4 TransformPowerbar()
     glm::mat4 model = Matrix_Identity();
 
     // Desenhamos o modelo da power bar que mede a força do arremesso
-    model = Matrix_Translate(-10.0f,0.0f,-2.5f);//camera_view_vector.z
+    model = Matrix_Translate(-10.0f,0.0f,-2.5f) * Matrix_Scale(3.0f,3.0f,3.0f);//camera_view_vector.z
 
     return model;
 }

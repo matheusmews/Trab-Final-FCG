@@ -299,9 +299,6 @@ std::vector<glm::mat4> TransformPlayer()
 // Função que transforma o collider do player
 glm::mat4 TransformPlayerCollider()
 {
-    glm::vec4 cu = glm::vec4(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ, 0.0f) + (movement_vector * 0.15f);
-
-
     glm::mat4 model = Matrix_Translate(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ)
                     * Matrix_Scale(0.6f, 1.80f, 0.4f);
 
@@ -430,11 +427,7 @@ void AnimatePlayerShot()
     float max_right_forearm_angle_z = 0.0f;
     float max_left_forearm_angle_x = -0.4f;
     float max_left_forearm_angle_z = -1.0f;
-    float max_right_forearm_angle_shot = 0.0f;
 
-    //printf("case %d\n", player_shooting_animation_part);
-    //printf("%f %f %f\n", g_RightForearmAngleX, g_RightForearmAngleY, g_RightForearmAngleZ);
-    //printf("%f %f %f\n\n", g_LeftForearmAngleX, g_LeftForearmAngleY, g_LeftForearmAngleZ);
     player_time_now = glfwGetTime();
     player_delta_time = player_time_now - player_time_prev;
     player_time_prev = player_time_now;
@@ -474,7 +467,6 @@ void AnimatePlayerShot()
             if (g_RightArmAngleX <= max_arm_angle)
             {
                 g_RightArmAngleX = max_arm_angle;
-                //g_LeftArmAngleX = max_arm_angle;
 
                 player_shooting_animation_part += 1;
             }
@@ -483,52 +475,33 @@ void AnimatePlayerShot()
         case 3:
             if (!g_MeasuringStrength)
             {
-                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
                 g_RightArmAngleX -= player_delta_time * delta_arm;
                 g_RightForearmAngleX += player_delta_time * delta_forearm;
-                //g_RightForearmAngleZ -= player_delta_time * delta_forearm;
-                //printf("%f %f %f %f\n", g_RightArmAngleX, g_RightForearmAngleX, g_RightForearmAngleZ, max_right_forearm_angle_shot);
 
                 if (g_RightArmAngleX <=  -2.0f)
                 {
-                    //g_RightForearmAngleX = max_right_forearm_angle_shot;
-                    //g_RightForearmAngleZ = max_right_forearm_angle_shot;
-
                     g_BallWasShot = true;
                     ball_time_prev = glfwGetTime();
                     ball_t = 0.0f;
 
-                    //ball_position_c = glm::vec4(g_TorsoPositionX, g_TorsoPositionY, g_TorsoPositionZ, 1.0f) * right_hand_model;
-
-                    //printf("%f %f %f\n", ball_position_c.x, ball_position_c.y, ball_position_c.z);
-                    glm::vec4 norm_cvv = glm::normalize(camera_view_vector_shot);
-
                     GLfloat distance_shot = porcentagem();
 
-                    printf("dist x = %f\n", distance_shot);
-                    printf("view vector: %f %f %f\n", camera_view_vector_shot.x, camera_view_vector_shot.y, camera_view_vector_shot.z);
-                    printf("ball position: %f %f %f\n", ball_position_c.x, ball_position_c.y, ball_position_c.z);
+                    glm::vec4 norm_cvv = glm::normalize(glm::vec4(camera_view_vector_shot.x,0.0f,camera_view_vector_shot.z,0.0f));
 
-
-                    p1.x = ball_position_c.x + 0.0f*camera_view_vector_shot.x;
-                    p2.x = ball_position_c.x + (distance_shot/3.0f)*camera_view_vector_shot.x;
-                    p3.x = ball_position_c.x + (2*distance_shot/3.0f)*camera_view_vector_shot.x;
-                    p4.x = ball_position_c.x + (distance_shot)*camera_view_vector_shot.x;
+                    p1.x = ball_position_c.x + 0.0f*norm_cvv.x;
+                    p2.x = ball_position_c.x + (distance_shot/3.0f)*norm_cvv.x;
+                    p3.x = ball_position_c.x + (2*distance_shot/3.0f)*norm_cvv.x;
+                    p4.x = ball_position_c.x + (distance_shot)*norm_cvv.x;
 
                     p1.y = ball_position_c.y + 0.7f;
                     p2.y = ball_position_c.y + std::max(3.5f,(distance_shot*0.55f));
                     p3.y = ball_position_c.y + std::max(3.5f,(distance_shot*0.55f));
                     p4.y = 3.0f;
 
-                    p1.z = ball_position_c.z + 0.0f*camera_view_vector_shot.z;
-                    p2.z = ball_position_c.z + (distance_shot/3.0f)*camera_view_vector_shot.z;
-                    p3.z = ball_position_c.z + (2*distance_shot/3.0f)*camera_view_vector_shot.z;
-                    p4.z = ball_position_c.z + (distance_shot)*camera_view_vector_shot.z;
-
-                    printf("p1: %f %f %f\n", p1.x,p1.y,p1.z);
-                    printf("p2: %f %f %f\n", p2.x,p2.y,p2.z);
-                    printf("p3: %f %f %f\n", p3.x,p3.y,p3.z);
-                    printf("p4: %f %f %f\n", p4.x,p4.y,p4.z);
+                    p1.z = ball_position_c.z + 0.0f*norm_cvv.z;
+                    p2.z = ball_position_c.z + (distance_shot/3.0f)*norm_cvv.z;
+                    p3.z = ball_position_c.z + (2*distance_shot/3.0f)*norm_cvv.z;
+                    p4.z = ball_position_c.z + (distance_shot)*norm_cvv.z;
 
                     BALL_SPEED = 0.3f;
                     if (distance_shot < 3.5f)
@@ -545,9 +518,6 @@ void AnimatePlayerShot()
                         g_BucketShot = true;
                         g_BallOnRim = false;
                         MAX_T = 1.0f;
-
-                        printf("fodase");
-                        printf("%f %f %f ss\n", p4.x, p4.y, p4.z);
                     }
 
                     player_shooting_animation_part += 1;

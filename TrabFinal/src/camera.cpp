@@ -183,12 +183,13 @@ void MoveFreeCamera(glm::vec3 bbox_cube_max, glm::vec3 bbox_cube_min,
 
     if (isCameraLookAt)
     {
-        camera_position = glm::vec4(g_CameraDistance*x, std::max(g_CameraDistance*y, 0.5f), g_CameraDistance*z, 1.0f);
+        glm::vec4 third_person_vector = glm::normalize(glm::vec4(w.x, w.y +1, w.z, 0.0f));
+        camera_position = glm::vec4(camera_position_c.x, camera_position_c.y, camera_position_c.z, 1.0f) + third_person_vector*g_CameraDistance;
 
         // O view vector de uma câmera look-at é igual ao ponto look-at menos a posição atual da câmera
 
-                             // ponto look-at (câmera vai estar sempre olhando para o player)
-        camera_view_vector = glm::vec4(camera_position_c.x, camera_position_c.y-2.0f, camera_position_c.z, 1.0f) + (movement_vector * 0.15f) -
+        // ponto look-at (câmera vai estar sempre olhando para o player)
+        camera_view_vector = glm::vec4(camera_position_c.x, camera_position_c.y, camera_position_c.z, 1.0f) -
                              // posição da câmera é formada pelos pontos x,y,z definidos acima multiplicados pela distância da câmera
                              camera_position;
     }

@@ -84,14 +84,14 @@ struct ObjModel
 // cada objeto da cena virtual.
 struct SceneObject
 {
-    std::string  name;        // Nome do objeto
-    size_t       first_index; // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    size_t       num_indices; // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    GLenum       rendering_mode; // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
+    std::string  name;                   // Nome do objeto
+    size_t       first_index;            // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
+    size_t       num_indices;            // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
+    GLenum       rendering_mode;         // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
     GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
-    glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
+    glm::vec3    bbox_min;               // Axis-Aligned Bounding Box do objeto
     glm::vec3    bbox_max;
-    Shader       sh_hoff;
+    Shader       sh_hoff;                // Shader do objeto
 };
 
 // Declaração de várias funções utilizadas em main().  Essas estão definidas
@@ -105,9 +105,6 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
 void LoadTextureImage(const char* filename); // Função que carrega imagens de textura
 void DrawVirtualObject(const char* object_name); // Desenha um objeto armazenado em g_VirtualScene
-GLuint LoadShader_Vertex(const char* filename);   // Carrega um vertex shader
-GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
-void LoadShader(const char* filename, GLuint shader_id); // Função utilizada pelas duas acima
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
 void PrintDebugs(); // Função para debugging
@@ -143,17 +140,6 @@ bool g_LeftMouseButtonPressed = false;
 bool g_RightMouseButtonPressed = false; // Análogo para botão direito do mouse
 bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mouse
 
-// Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
-GLuint vertex_shader_id;
-GLuint fragment_shader_id;
-GLuint program_id = 0;
-GLint model_uniform;
-GLint view_uniform;
-GLint projection_uniform;
-GLint object_id_uniform;
-GLint bbox_min_uniform;
-GLint bbox_max_uniform;
-
 // Variáveis de print de debugs
 bool g_ShowDebugs = false;
 
@@ -180,115 +166,6 @@ GLuint g_NumLoadedTextures = 0;
 #define POINTS             13
 #define PERIOD             14
 #define BBOX               15
-
-// Constrói triângulos para futura renderização
-GLuint BuildTriangles()
-{
-    // Primeiro, definimos os atributos de cada vértice.
-    GLfloat NDC_coefficients[2*4];
-    NDC_coefficients[0] = 0.0f;//camera_position_c.x;   // X
-    NDC_coefficients[1] = 0.0f;//camera_position_c.y;   // Y
-    NDC_coefficients[2] = 0.0f;//camera_position_c.z;   // Z
-    NDC_coefficients[3] = 1.0f;                  // W
-
-    NDC_coefficients[4] = 0.0f;//camera_position_c.x+camera_view_vector.x;   // X
-    NDC_coefficients[5] = 0.0f;//camera_position_c.y+camera_view_vector.y;   // Y
-    NDC_coefficients[6] = 1.0f;//camera_position_c.z+camera_view_vector.z;   // Z
-    NDC_coefficients[7] = 1.0f;                                       // W
-
-    GLuint VBO_NDC_coefficients_id;
-    glGenBuffers(1, &VBO_NDC_coefficients_id);
-
-    GLuint vertex_array_object_id;
-    glGenVertexArrays(1, &vertex_array_object_id);
-
-    glBindVertexArray(vertex_array_object_id);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_NDC_coefficients_id);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_coefficients), NULL, GL_STATIC_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(NDC_coefficients), NDC_coefficients);
-
-    GLuint location = 0; // "(location = 0)" em "shader_vertex.glsl"
-    GLint  number_of_dimensions = 4; // vec4 em "shader_vertex.glsl"
-    glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
-
-    glEnableVertexAttribArray(location);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    // Agora repetimos todos os passos acima para atribuir um novo atributo a
-    // cada vértice: uma cor (veja slides 109-112 do documento Aula_03_Rendering_Pipeline_Grafico.pdf e slide 111 do documento Aula_04_Modelagem_Geometrica_3D.pdf).
-    // Tal cor é definida como coeficientes RGBA: Red, Green, Blue, Alpha;
-    // isto é: Vermelho, Verde, Azul, Alpha (valor de transparência).
-    // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
-    GLfloat color_coefficients[2*4];
-    color_coefficients[0] = 1.0f; // R
-    color_coefficients[1] = 0.0f; // G
-    color_coefficients[2] = 0.0f; // B
-    color_coefficients[3] = 1.0f; // A
-
-    color_coefficients[4] = 1.0f; // R
-    color_coefficients[5] = 0.0f; // G
-    color_coefficients[6] = 0.0f; // B
-    color_coefficients[7] = 1.0f; // A
-
-    GLuint VBO_color_coefficients_id;
-    glGenBuffers(1, &VBO_color_coefficients_id);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_color_coefficients_id);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(color_coefficients), NULL, GL_STATIC_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(color_coefficients), color_coefficients);
-    location = 1; // "(location = 1)" em "shader_vertex.glsl"
-    number_of_dimensions = 4; // vec4 em "shader_vertex.glsl"
-    glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(location);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    GLubyte indices[2]; // GLubyte: valores entre 0 e 255 (8 bits sem sinal).
-    indices[0] = 0, indices[1] = 1;
-
-    // Criamos um buffer OpenGL para armazenar os índices acima
-    GLuint indices_id;
-    glGenBuffers(1, &indices_id);
-
-    // "Ligamos" o buffer. Note que o tipo agora é GL_ELEMENT_ARRAY_BUFFER.
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
-
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), NULL, GL_STATIC_DRAW);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, sizeof(indices), indices);
-
-    // "Desligamos" o VAO, evitando assim que operações posteriores venham a
-    // alterar o mesmo. Isso evita bugs.
-    glBindVertexArray(0);
-
-    // Retornamos o ID do VAO. Isso é tudo que será necessário para renderizar
-    // os triângulos definidos acima. Veja a chamada glDrawElements() em main().
-    return vertex_array_object_id;
-}
-
-glm::mat4 lookat(glm::vec3 cu)
-{
-    glm::vec3 worldUp = glm::vec3(0.0f,1.0f,0.0f);
-    cu = glm::normalize(cu);
-
-    glm::vec3 axis = glm::cross(glm::vec3(0.0, 0.0, -1.0), cu);
-    float w = 1.0f + glm::dot(glm::vec3(0.0, 0.0, -1.0), cu);
-
-    glm::quat rotation = glm::normalize(glm::quat(w, axis));
-
-    glm::vec3 fronte = glm::vec3(0.0,0.0,1.0);
-    glm::vec3 up = glm::vec3(0.0,1.0,0.0);
-
-    glm::vec3 realUp = glm::normalize(glm::cross(glm::cross(fronte, worldUp), fronte));
-
-    axis = glm::cross(up, realUp);
-    w = 1.0f + glm::dot(up, realUp);
-
-    rotation = glm::normalize(glm::quat(w, axis)) * rotation;
-
-    glm::vec3 r = glm::eulerAngles(rotation);
-
-    return Matrix_Rotate_Z(r.z) * Matrix_Rotate_Y(r.y) * Matrix_Rotate_X(r.x);
-}
 
 int main(int argc, char* argv[])
 {
@@ -359,7 +236,6 @@ int main(int argc, char* argv[])
 
     // Carregamos os shaders de vértices e de fragmentos que serão utilizados
     // para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
-    // LoadShadersFromFiles();
     sh_hoff = Shader("../../src/shader_vertex.glsl","../../src/shader_fragment.glsl");
     sh_para_o_power_bar = Shader("../../src/shader_vertex_power_bar.glsl","../../src/shader_fragment_power_bar.glsl");
 
@@ -371,11 +247,6 @@ int main(int argc, char* argv[])
 
     // Habilitamos o Z-buffer. Veja slides 104-116 do documento Aula_09_Projecoes.pdf.
     glEnable(GL_DEPTH_TEST);
-
-    // Habilitamos o Backface Culling. Veja slides 23-34 do documento Aula_13_Clipping_and_Culling.pdf.
-    //glEnable(GL_CULL_FACE);
-    //glCullFace(GL_BACK);
-    //glFrontFace(GL_CCW);
 
     // Setamos as bbox dos objetos fixos para serem utilizadas nas funções de colisão
     SetWallsBboxes(g_VirtualScene["plane"].bbox_max, g_VirtualScene["plane"].bbox_min);
@@ -428,10 +299,6 @@ int main(int argc, char* argv[])
         for (auto cur_model : TransformHoop())
             RenderObject("hoop",cur_model,HOOP,false);
 
-        // TESTE POWER BAR =============================================================
-        model = TransformPowerbar();
-        RenderObject("powerbar",model,POWERBAR,true);
-
         for (auto cur_model : TransformScoreboard())
             RenderObject("scoreboard",cur_model,SCOREBOARD,false);
         for (auto cur_model : TransformScoreboardTime())
@@ -445,8 +312,12 @@ int main(int argc, char* argv[])
         if (g_ShowDebugs)
             PrintDebugs();
 
-        // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-        TextRendering_ShowProjection(window);
+        // POWER BAR =============================================================
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        model = TransformPowerbar();
+        RenderObject("powerbar",model,POWERBAR,true);
+
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
         TextRendering_ShowFramesPerSecond(window);
@@ -477,21 +348,18 @@ int main(int argc, char* argv[])
 void LoadData()
 {
     // Carregamos as imagens para serem utilizadas como textura
-
-    LoadTextureImage("../../data/textures/ball/spalding.png");             // TextureImageBall
-    LoadTextureImage("../../data/textures/hoop/hoop.png");                 // TextureImageHoop
-    LoadTextureImage("../../data/textures/score/scoreboard.png");          // TextureImageScoreboard
-    LoadTextureImage("../../data/textures/court/warriors_court.png");      // TextureImageCourtWarriors
-    LoadTextureImage("../../data/textures/skybox/warriors_skybox.png");    // TextureImageSkyboxWarriors
-    LoadTextureImage("../../data/textures/court/beach_court.png");         // TextureImageCourtBeach
-    LoadTextureImage("../../data/textures/skybox/beach_skybox.png");       // TextureImageSkyboxBeach
-    LoadTextureImage("../../data/textures/ball/beach_ball.png");         // TextureImageBallBeach
+    LoadTextureImage("../../data/textures/ball/spalding.png");               // TextureImageBall
+    LoadTextureImage("../../data/textures/hoop/hoop.png");                   // TextureImageHoop
+    LoadTextureImage("../../data/textures/score/scoreboard.png");            // TextureImageScoreboard
+    LoadTextureImage("../../data/textures/court/warriors_court.png");        // TextureImageCourtWarriors
+    LoadTextureImage("../../data/textures/skybox/warriors_skybox.png");      // TextureImageSkyboxWarriors
+    LoadTextureImage("../../data/textures/court/beach_court.png");           // TextureImageCourtBeach
+    LoadTextureImage("../../data/textures/skybox/beach_skybox.png");         // TextureImageSkyboxBeach
+    LoadTextureImage("../../data/textures/ball/beach_ball.png");             // TextureImageBallBeach
+    LoadTextureImage("../../data/textures/powerbar/outline_powerbar.png");   // TextureImagePowerBar
+    LoadTextureImage("../../data/textures/powerbar/inside_powerbar.png");    // TextureImagePowerBarInside
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel bunnymodel("../../data/objects/bunny.obj");
-    ComputeNormals(&bunnymodel);
-    BuildTrianglesAndAddToVirtualScene(&bunnymodel);
-
     ObjModel planemodel("../../data/objects/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
@@ -516,15 +384,14 @@ void LoadData()
     ComputeNormals(&hoop);
     BuildTrianglesAndAddToVirtualScene(&hoop);
 
-    // TESTE POWER BAR =====================
-    ObjModel powerbar("../../data/objects/powerbar.obj");
-    ComputeNormals(&powerbar);
-    BuildTrianglesAndAddToVirtualScene(&powerbar);
-
     ObjModel scoreboard("../../data/objects/scoreboard.obj");
     ComputeNormals(&scoreboard);
     BuildTrianglesAndAddToVirtualScene(&scoreboard);
     SaveNumbers();
+
+    ObjModel powerbar("../../data/objects/powerbar.obj");
+    ComputeNormals(&powerbar);
+    BuildTrianglesAndAddToVirtualScene(&powerbar);
 }
 
 // Função que carrega os objetos que serão os números do scoreboard
@@ -576,25 +443,14 @@ void SaveNumbers()
     BuildTrianglesAndAddToVirtualScene(&two_points);
 }
 
-// FUNÇÃO FODA
+// FUNÇÃO PRINCIPAL DE RENDERIZAÇÃO
 void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool ortho)
 {
-    /* funcao chamada pra todo objeto que quero rendenizar no frame
-    tem que usar o shader
-    setar matriz do shader com informacao de model e cam
-    setar parametros do fragment
-    bindar o vao
-    glview port *
-    ordem de transparencia *
-    chamar a drawelement
-    */
-
     // Pega o SceneObject do objeto que foi passado como parâmetro
     SceneObject theobject = g_VirtualScene[object_name];
 
     // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
-    // os shaders de vértice e fragmentos).
-    // glUseProgram(program_id);
+    // os shaders de vértice e fragmentos)
     Shader current_used_shader = theobject.sh_hoff;
     current_used_shader.use();
 
@@ -617,55 +473,34 @@ void RenderObject(std::string object_name, glm::mat4 model, int object_id, bool 
 
     current_used_shader.setMatrix4("view",view);
     current_used_shader.setMatrix4("projection",projection);
-
-    if (theobject.name == "cube")
-    {
-        //theobject.id = CUBE;
-    }
-    if (theobject.name == "basketball_court") // court
-    {
-        //theobject.id = COURT;
-    }
-    else if (theobject.name == "sphere") // bola
-    {
-        //theobject.id = SPHERE;
-    }
-    else if (theobject.name == "backboard_glass") // vidro
-    {
-        //theobject.id = GLASS;
-    }
-    else if (theobject.name == "basketball_backboard") // tabela
-    {
-        //theobject.id = BACKBOARD;
-    }
-    else if (theobject.name == "skybox") // skybox
-    {
-        //theobject.id = SKYBOX;
-    }
-    else if (theobject.name == "powerbar")
-    {
-        current_used_shader.setFloat4("cameraPosition",camera_position);
-        current_used_shader.setFloat2("spriteSize", glm::vec2(0.2f,0.5f));
-        current_used_shader.setFloat2("barPosition",glm::vec2(0.0f,-1.0f));
-    }
-
     current_used_shader.setMatrix4("model",model);
-    current_used_shader.setInt("object_id",object_id);
 
-    current_used_shader.setBool("CourtIsInTheBeach",CourtIsInTheBeach);
-    current_used_shader.setBool("GouradShading",GouradShading);
+    if (theobject.name == "powerbar")
+    {
+        current_used_shader.setFloat("power",measure_delta_time);
 
-    current_used_shader.setFloat4("bbox_min", glm::vec4(theobject.bbox_min,1.0f));
-    current_used_shader.setFloat4("bbox_max", glm::vec4(theobject.bbox_max,1.0f));
+        current_used_shader.setInt("TextureImagePowerBar",8);
+        current_used_shader.setInt("TextureImagePowerBarInside",9);
+    }
+    else
+    {
+        current_used_shader.setInt("object_id",object_id);
 
-    current_used_shader.setInt("TextureImageBall",0);
-    current_used_shader.setInt("TextureImageHoop",1);
-    current_used_shader.setInt("TextureImageScoreboard",2);
-    current_used_shader.setInt("TextureImageCourtWarriors",3);
-    current_used_shader.setInt("TextureImageSkyboxWarriors",4);
-    current_used_shader.setInt("TextureImageCourtBeach",5);
-    current_used_shader.setInt("TextureImageSkyboxBeach",6);
-    current_used_shader.setInt("TextureImageBallBeach",7);
+        current_used_shader.setBool("CourtIsInTheBeach",CourtIsInTheBeach);
+        current_used_shader.setBool("GouradShading",GouradShading);
+
+        current_used_shader.setFloat4("bbox_min", glm::vec4(theobject.bbox_min,1.0f));
+        current_used_shader.setFloat4("bbox_max", glm::vec4(theobject.bbox_max,1.0f));
+
+        current_used_shader.setInt("TextureImageBall",0);
+        current_used_shader.setInt("TextureImageHoop",1);
+        current_used_shader.setInt("TextureImageScoreboard",2);
+        current_used_shader.setInt("TextureImageCourtWarriors",3);
+        current_used_shader.setInt("TextureImageSkyboxWarriors",4);
+        current_used_shader.setInt("TextureImageCourtBeach",5);
+        current_used_shader.setInt("TextureImageSkyboxBeach",6);
+        current_used_shader.setInt("TextureImageBallBeach",7);
+    }
 
     DrawVirtualObject(theobject.name.c_str());
 }
@@ -961,104 +796,6 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
     glBindVertexArray(0);
 }
 
-// Carrega um Vertex Shader de um arquivo GLSL. Veja definição de LoadShader() abaixo.
-GLuint LoadShader_Vertex(const char* filename)
-{
-    // Criamos um identificador (ID) para este shader, informando que o mesmo
-    // será aplicado nos vértices.
-    GLuint vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-
-    // Carregamos e compilamos o shader
-    LoadShader(filename, vertex_shader_id);
-
-    // Retorna o ID gerado acima
-    return vertex_shader_id;
-}
-
-// Carrega um Fragment Shader de um arquivo GLSL . Veja definição de LoadShader() abaixo.
-GLuint LoadShader_Fragment(const char* filename)
-{
-    // Criamos um identificador (ID) para este shader, informando que o mesmo
-    // será aplicado nos fragmentos.
-    GLuint fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-
-    // Carregamos e compilamos o shader
-    LoadShader(filename, fragment_shader_id);
-
-    // Retorna o ID gerado acima
-    return fragment_shader_id;
-}
-
-// Função auxilar, utilizada pelas duas funções acima. Carrega código de GPU de
-// um arquivo GLSL e faz sua compilação.
-void LoadShader(const char* filename, GLuint shader_id)
-{
-    // Lemos o arquivo de texto indicado pela variável "filename"
-    // e colocamos seu conteúdo em memória, apontado pela variável
-    // "shader_string".
-    std::ifstream file;
-    try {
-        file.exceptions(std::ifstream::failbit);
-        file.open(filename);
-    } catch ( std::exception& e ) {
-        fprintf(stderr, "ERROR: Cannot open file \"%s\".\n", filename);
-        std::exit(EXIT_FAILURE);
-    }
-    std::stringstream shader;
-    shader << file.rdbuf();
-    std::string str = shader.str();
-    const GLchar* shader_string = str.c_str();
-    const GLint   shader_string_length = static_cast<GLint>( str.length() );
-
-    // Define o código do shader GLSL, contido na string "shader_string"
-    glShaderSource(shader_id, 1, &shader_string, &shader_string_length);
-
-    // Compila o código do shader GLSL (em tempo de execução)
-    glCompileShader(shader_id);
-
-    // Verificamos se ocorreu algum erro ou "warning" durante a compilação
-    GLint compiled_ok;
-    glGetShaderiv(shader_id, GL_COMPILE_STATUS, &compiled_ok);
-
-    GLint log_length = 0;
-    glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &log_length);
-
-    // Alocamos memória para guardar o log de compilação.
-    // A chamada "new" em C++ é equivalente ao "malloc()" do C.
-    GLchar* log = new GLchar[log_length];
-    glGetShaderInfoLog(shader_id, log_length, &log_length, log);
-
-    // Imprime no terminal qualquer erro ou "warning" de compilação
-    if ( log_length != 0 )
-    {
-        std::string  output;
-
-        if ( !compiled_ok )
-        {
-            output += "ERROR: OpenGL compilation of \"";
-            output += filename;
-            output += "\" failed.\n";
-            output += "== Start of compilation log\n";
-            output += log;
-            output += "== End of compilation log\n";
-        }
-        else
-        {
-            output += "WARNING: OpenGL compilation of \"";
-            output += filename;
-            output += "\".\n";
-            output += "== Start of compilation log\n";
-            output += log;
-            output += "== End of compilation log\n";
-        }
-
-        fprintf(stderr, "%s", output.c_str());
-    }
-
-    // A chamada "delete" em C++ é equivalente ao "free()" do C
-    delete [] log;
-}
-
 // Esta função cria um programa de GPU, o qual contém obrigatoriamente um
 // Vertex Shader e um Fragment Shader.
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id)
@@ -1278,16 +1015,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário pressionar a tecla ESC, fechamos a janela.
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
-
-    // O código abaixo implementa a seguinte lógica:
-    //   Se apertar tecla X       então g_AngleX += delta;
-    //   Se apertar tecla shift+X então g_AngleX -= delta;
-    //   Se apertar tecla Y       então g_AngleY += delta;
-    //   Se apertar tecla shift+Y então g_AngleY -= delta;
-    //   Se apertar tecla Z       então g_AngleZ += delta;
-    //   Se apertar tecla shift+Z então g_AngleZ -= delta;
-
-    float delta = 3.141592 / 16; // 22.5 graus, em radianos.
 
     if (key == GLFW_KEY_X && action == GLFW_PRESS)
     {
